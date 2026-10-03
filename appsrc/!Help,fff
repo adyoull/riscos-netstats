@@ -1,0 +1,143 @@
+NetStats 1.03 (03 Oct 2026)
+===========================
+
+Network statistics for RISC OS. NetStats shows how much your machine is
+sending and receiving, per network interface, with a live graph, plus the
+TCP, UDP and IP counters and a list of open connections.
+
+It works with the RISC OS Developments (ROD) TCP/IP stack (Internet 7.x,
+based on OpenBSD) and with the older Acorn/ROOL Internet 5 stack. It finds
+out which one is loaded when it starts.
+
+NetStats was written because SockStatsLite, by Chris Williams, stops
+working on the ROD stack. SockStatsLite asks the stack for the address of
+its internal "_tcpstat" structure (Socket_InternalLookup) and reads the
+counters from there. The ROD stack does not publish that address (its
+counters are per-processor now), so the lookup fails. NetStats reads the
+same information through Socket_Sysctl instead, the way the stack's own
+inetstat command does.
+
+
+Using it
+--------
+Run !NetStats; its icon appears on the icon bar.
+
+  Select on the icon   opens the Monitor window
+  Adjust on the icon   opens the Interfaces window
+  Menu                 the main menu (also on Menu in any NetStats window)
+
+Monitor
+  Current download and upload rates, the totals since the machine started,
+  and a graph of the last five minutes (one point a second). The graph's
+  scale follows the busiest moment on screen and is shown at the top left.
+  Download is green, upload is red. You can resize the window.
+  The rates are the sum of all interfaces except loopback (lo0), which
+  only carries traffic within this machine. See "Include loopback".
+
+Interfaces
+  Every interface the stack knows about: its name (e.g. en0, lo0), type,
+  link state (up, full/half duplex, no cable), speed, MTU, hardware (MAC)
+  address, IPv4 and IPv6 addresses, and for each direction the current
+  rate, total bytes, packets, errors and drops.
+
+Protocols
+  TCP, UDP and IP (version 4) counters since start-up, with the change per
+  second next to each one: connections opened and dropped,
+  retransmissions, bad checksums, packets to closed ports and so on.
+
+Connections
+  Open TCP and UDP sockets: local and remote address, state and queue
+  sizes. NetStats gets these by running the stack's "inetstat -an" command
+  (or "netstat -an" if that is what is on Run$Path) in a TaskWindow, so
+  the desktop carries on while it runs and no command window appears. It
+  is a snapshot: click in the window to take a new one, or tick
+  "Auto-refresh connections" in the menu to update it every 10 seconds
+  while the window is open.
+
+Menu
+  Info                      about NetStats
+  Monitor, Interfaces,
+  Protocols, Connections    open the windows; a tick shows which are
+                            open, and choosing a ticked one closes it
+  Show bits/s               show rates in bits per second (kbit/s, Mbit/s,
+                            powers of 1000) instead of bytes per second
+                            (KB/s, MB/s, powers of 1024)
+  Include loopback          count lo0 in the Monitor totals
+  Rates on icon bar         show the current download (v) and upload (^)
+                            rates under the icon bar icon, e.g.
+                            "v1.2M ^34K" (on by default)
+  Auto-refresh connections  see Connections above
+  Quit
+
+
+Choices
+-------
+NetStats remembers which windows were open, where they were, and the
+menu options (bits/s, loopback, rates on icon bar, auto-refresh). They are
+saved whenever you change something in the menu and when NetStats quits,
+in <Choices$Write>.NetStats.Choices (a text file), and the windows are
+re-opened where you left them next time.
+
+
+Notes
+-----
+* Counters are read once a second. All totals are since the stack started
+  (normally since the machine was switched on).
+* The ROD stack counts in 64 bits, so the totals do not wrap. The old stack
+  counts in 32 bits: its byte totals go back to zero after 4 GB, which
+  NetStats allows for when it works out the rates.
+* On the old stack the protocol counters come from Socket_InternalLookup,
+  as SockStatsLite did. A few counters only exist on the ROD stack; these
+  show "n/a".
+* If the interface list cannot be read, the Monitor falls back to TCP data
+  bytes only and says so.
+* Needs RISC OS 3.5 or later (the windows use Wimp_TextOp and the icon is a
+  32 bpp sprite). Written in BBC BASIC; the source is !RunImage.
+
+
+How it reads the stack (for programmers)
+----------------------------------------
+Socket_Sysctl (&4121A), R0 -> MIB, R1 = MIB length, R2 -> buffer,
+R3 -> buffer length (updated), R4 = R5 = 0:
+
+  4,17,0,0,3,0   net.route.0.0.iflist  - one RTM_IFINFO message per
+                 interface (if_msghdr + if_data + sockaddr_dl) and one
+                 RTM_NEWADDR (ifa_msghdr + netmask + address) per address
+  4,2,6,21       net.inet.tcp.stats    - struct tcpstat (ROD)
+  4,2,17,5       net.inet.udp.stats    - struct udpstat (ROD)
+  4,2,0,33       net.inet.ip.stats     - struct ipstat  (ROD)
+
+The ROD stack uses OpenBSD 6.8's structures: ifm_hdrlen gives the header
+size and if_data's counters are 64 bits. The old stack uses 4.4BSD/FreeBSD
+layouts (no header length field, 32 bit counters); NetStats picks the
+layout from the stack's version (Socket_Version: 700 or more is ROD).
+tcpstat has 64 bit fields part way through, so its size tells NetStats
+how the stack was compiled (536 bytes: 4 byte aligned, 560: 8 byte
+aligned); an unexpected size is reported in the Protocols window.
+
+
+Credits and licence
+-------------------
+Inspired by SockStats and SockStatsLite by Chris Williams, written with
+the help of Justin Fletcher.
+
+Copyright (c) 2026 Andrew Youll
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to permit
+persons to whom the Software is furnished to do so, subject to the
+following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+USE OR OTHER DEALINGS IN THE SOFTWARE.

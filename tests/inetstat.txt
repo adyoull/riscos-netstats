@@ -1,0 +1,12 @@
+Active Internet connections (including servers)
+Proto   Recv-Q Send-Q  Local Address          Foreign Address        (state)
+tcp          0      0  192.168.1.50.22        192.168.1.2.51234      ESTABLISHED
+tcp          0     52  192.168.1.50.49152     151.101.1.140.443      ESTABLISHED
+tcp          0      0  *.80                   *.*                    LISTEN
+udp          0      0  *.68                   *.*
+Active Internet connections (including servers)
+Proto   Recv-Q Send-Q  Local Address                                 Foreign Address                               (state)
+tcp6         0      0  *.22                                          *.*                                           LISTEN
+Active UNIX domain sockets
+Address    Type   Recv-Q Send-Q    Inode     Conn     Refs  Nextref Addr
+0x0        stream      0      0        0        0        0        0

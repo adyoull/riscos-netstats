@@ -1,0 +1,3 @@
+| !Boot file for NetStats
+If "<NetStats$Dir>"="" Then Set NetStats$Dir <Obey$Dir>
+IconSprites <Obey$Dir>.!Sprites
