@@ -86,7 +86,7 @@ PROCeq(FNshowtabs(rt$(2)),"127.0.0.1 |  | 127.0.0.1 | UH | lo0")
 PROCeq(gw4$,"192.168.1.1 (en0)"):PROCeq(gw6$,"fe80::1 (en0)")
 PROCeq(FNshowtabs(rt$(4)),"2001:db8:1234:5678::/64")
 PROCeq(FNshowtabs(rt$(5))," |  | direct (en0) | U | en0")
-PROCtext_net:PROCdump(WNET%)
+PROCtext_net:PROCdump(WNET%):PROCeq(LEFT$(L$(WNET%,0),9),"~Updated ")
 PRINT "== routes (old stack)"
 stack%=1:ifn%=0:fx$="fx/old_iflist":PROCread_ifaces(1):rtfx$="fx/old_routes":rtn%=0:PROCread_routes
 PROCeq(STR$rtn%,"2"):PROCeq(gw4$,"10.0.0.1 (eh0)"):PROCeq(FNshowtabs(rt$(1)),"10.0.0.0/16 |  | direct (eh0) | U | eh0")

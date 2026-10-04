@@ -1,4 +1,4 @@
-NetStats 1.05-rc2 (04 Oct 2026)
+NetStats 1.05-rc3 (04 Oct 2026)
 ===============================
 
 Network statistics for RISC OS. NetStats shows how much your machine is
@@ -66,8 +66,11 @@ Data usage
 Network
   This machine's host name, domain, DNS servers and default gateway, and
   the routing table (destination, gateway, flags, interface). Local,
-  broadcast, multicast and ARP entries are left out. It updates every 10
-  seconds while open; click in the window to update it at once.
+  broadcast, multicast and ARP entries are left out. It updates itself
+  every 5 seconds while it is open (the top line shows when it last did);
+  click in the window to update it at once. Host name, domain and DNS
+  servers come from the Inet$HostName, Inet$LocalDomain and
+  Inet$Resolvers system variables.
 
 Menu
   Info                      about NetStats

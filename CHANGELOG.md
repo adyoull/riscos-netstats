@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.05-rc3 (04 Oct 2026)
+- Network: updates itself every 5 seconds while open (was 10) and shows
+  the time of the last update, so it's clear it refreshes on its own.
+
 ## 1.05-rc2 (04 Oct 2026)
 - Data usage: the "This session" label no longer runs into the Down
   column; when the session started is shown on its own line.

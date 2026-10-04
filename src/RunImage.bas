@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.05-rc2 (04 Oct 2026)"
+app$="NetStats":version$="1.05-rc3 (04 Oct 2026)"
 quit%=FALSE:task%=0
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -224,7 +224,8 @@ hin(hpos%)=totin:hout(hpos%)=totout
 hpos%=(hpos%+1) MOD HN%:IF hcount%<HN% THEN hcount%+=1
 IF first% THEN hcount%=0
 last%=now%
-IF wopen%(WNET%) AND FNtdiff(now%,netstamp%)>=1000 THEN PROCbuild_one(WNET%)
+REM the Network window updates itself every 5 seconds while it is open
+IF wopen%(WNET%) AND FNtdiff(now%,netstamp%)>=500 THEN PROCbuild_one(WNET%)
 FOR j%=0 TO NWIN%-1
   IF wopen%(j%) THEN
     IF j%<>WCONN% AND j%<>WNET% THEN PROCbuild_one(j%)
@@ -1668,7 +1669,7 @@ DEF PROCtext_net
 LOCAL T$, i%, v$
 T$=CHR$9
 nlines%(WNET%)=0
-PROCaddl(WNET%,"~Click in this window to refresh. Settings come from the Inet$ system variables.")
+PROCaddl(WNET%,"~Updated "+MID$(TIME$,17,8)+"; updates every 5 seconds (click to update now).")
 PROCaddl(WNET%,"#This machine")
 v$=FNvar("Inet$HostName"):IF v$="" THEN v$="(not set)"
 PROCaddl(WNET%,"Host name"+T$+v$)
