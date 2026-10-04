@@ -1,5 +1,5 @@
-NetStats 1.05-rc3 (04 Oct 2026)
-===============================
+NetStats 1.05 (04 Oct 2026)
+===========================
 
 Network statistics for RISC OS. NetStats shows how much your machine is
 sending and receiving, per network interface, with a live graph, plus the

@@ -1,27 +1,21 @@
 # Changelog
 
-## 1.05-rc3 (04 Oct 2026)
-- Network: updates itself every 5 seconds while open (was 10) and shows
-  the time of the last update, so it's clear it refreshes on its own.
-
-## 1.05-rc2 (04 Oct 2026)
-- Data usage: the "This session" label no longer runs into the Down
-  column; when the session started is shown on its own line.
-
-## 1.05-rc1 (04 Oct 2026)
+## 1.05 (04 Oct 2026)
 - New **Data usage** window: this session, today, this month, the last
   14 days and 12 months (counted while NetStats runs; saved in
   `<Choices$Write>.NetStats.Usage`). Menu: "Reset session totals".
 - New **Network** window: host name, domain, DNS servers, default
-  gateway and the routing table (from `net.route.0.0.dump`).
+  gateway and the routing table. It updates itself every 5 seconds and
+  shows when it last did; click to update at once.
 - **Interface** submenu: show all interfaces or just one in the Monitor
   and on the icon bar (saved in Choices).
 - Windows only redraw the lines that changed, so they no longer flicker
   once a second, and text is only built for open windows.
 - TaskWindow_Output messages are now acknowledged, as the PRM asks.
   Task handles are passed to TaskWindow as 8 hex digits. The program
-  information fields are display fields (no click action).
+  information fields are display fields.
 - WimpSlot raised to 512K.
+- Test builds 1.05-rc1 to rc3 led up to this release.
 
 ## 1.04 (04 Oct 2026)
 - Connections: the Recv-Q and Send-Q headings no longer overlap (wider
