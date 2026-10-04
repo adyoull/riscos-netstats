@@ -2,7 +2,7 @@
 # Build !NetStats and NetStats-<ver>.zip (RISC OS filetypes kept in the zip)
 set -e
 cd "$(dirname "$0")"
-VER=1.03
+VER=1.04
 rm -rf build && mkdir -p build/'!NetStats'
 A=build/'!NetStats'
 cp appsrc/'!Run,feb' appsrc/'!Boot,feb' appsrc/'!Help,fff' "$A/"

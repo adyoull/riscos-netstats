@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.04 (04 Oct 2026)
+- Connections: the Recv-Q and Send-Q headings no longer overlap (wider
+  queue columns; the window opens wider).
+- The "About this program" window now looks like other RISC OS
+  programs': "Name:" style labels and grey display fields with a sunken
+  border, and a Licence row.
+
 ## 1.03 (03 Oct 2026)
 - The current download and upload rates are shown under the icon bar icon
   ("v1.2M ^34K"). Menu option "Rates on icon bar" turns this off.

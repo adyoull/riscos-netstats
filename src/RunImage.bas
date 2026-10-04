@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.03 (03 Oct 2026)"
+app$="NetStats":version$="1.04 (04 Oct 2026)"
 quit%=FALSE:task%=0
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -800,11 +800,12 @@ nwin%=0
 wh%(WMON%)=FNwindow("NetStats",600,300,1600,1200,&A7000002,200,160)
 wh%(WIF%)=FNwindow("Interfaces",1060,640,1400,4000,&BF000002,0,0)
 wh%(WPROT%)=FNwindow("Protocol statistics",820,640,1000,4000,&BF000002,0,0)
-wh%(WCONN%)=FNwindow("Connections",1180,560,1400,8000,&BF000002,0,0)
+wh%(WCONN%)=FNwindow("Connections",1300,560,1400,8000,&BF000002,0,0)
 REM tab stops (negative = right aligned at that x)
 tab%(WIF%,0)=16:tab%(WIF%,1)=150:tab%(WIF%,2)=-380:tab%(WIF%,3)=-560:tab%(WIF%,4)=-770:tab%(WIF%,5)=-900:tab%(WIF%,6)=-1030
 tab%(WPROT%,0)=16:tab%(WPROT%,1)=-600:tab%(WPROT%,2)=-790
-tab%(WCONN%,0)=16:tab%(WCONN%,1)=100:tab%(WCONN%,2)=490:tab%(WCONN%,3)=880:tab%(WCONN%,4)=-1080:tab%(WCONN%,5)=-1160
+REM queue columns right-aligned with room for their headings (~110 wide)
+tab%(WCONN%,0)=16:tab%(WCONN%,1)=100:tab%(WCONN%,2)=470:tab%(WCONN%,3)=840:tab%(WCONN%,4)=-1130:tab%(WCONN%,5)=-1270
 PROCcreate_info
 ENDPROC
 
@@ -821,40 +822,46 @@ b%!72=ind%:b%!76=-1:b%!80=40:b%!84=0
 SYS "Wimp_CreateWindow",,b% TO hd%
 =hd%
 
+REM The standard RISC OS program information window: labels on the left,
+REM values in grey display fields with a sunken border (validation R2),
+REM rows 52 OS units apart, as in the usual ProgInfo template
 DEF PROCcreate_info
 LOCAL i%, y%, l$, v$
-info%=FNwindow_plain("About this program",660,240)
+info%=FNwindow_plain("About this program",612,268)
 RESTORE +0
-FOR i%=0 TO 3
+FOR i%=0 TO 4
   READ l$, v$
-  IF i%=3 THEN v$=version$
-  y%=-56-i%*48
-  PROCicon(info%,8,y%,170,y%+40,&07000211,l$)
-  PROCicon(info%,180,y%,644,y%+40,&07000135,v$)
+  IF i%=4 THEN v$=version$
+  y%=-8-i%*52
+  PROCicon(info%,8,y%-48,152,y%,&17000211,l$,"")
+  PROCicon(info%,152,y%-48,602,y%,&1700613D,v$,"R2")
 NEXT
 ENDPROC
-DATA Name,NetStats
-DATA Purpose,Network statistics for RISC OS
-DATA Author,Andrew Youll
-DATA Version,-
+DATA Name:,NetStats
+DATA Purpose:,Network statistics
+DATA Author:,Andrew Youll
+DATA Licence:,MIT (open source)
+DATA Version:,-
 
 DEF FNwindow_plain(t$, w%, h%)
 LOCAL hh%, ind%
 DIM ind% 40:$ind%=t$
 b%!0=400:b%!4=600:b%!8=400+w%:b%!12=600+h%:b%!16=0:b%!20=0:b%!24=-1
 b%!28=&84000012
-b%?32=7:b%?33=2:b%?34=7:b%?35=1:b%?36=3:b%?37=1:b%?38=12:b%?39=0
+b%?32=7:b%?33=2:b%?34=7:b%?35=1:b%?36=3:b%?37=2:b%?38=12:b%?39=0
 b%!40=0:b%!44=-h%:b%!48=w%:b%!52=0
 b%!56=&0700013D:b%!60=0:b%!64=1:b%!68=0
 b%!72=ind%:b%!76=-1:b%!80=40:b%!84=0
 SYS "Wimp_CreateWindow",,b% TO hh%
 =hh%
 
-DEF PROCicon(w%, x0%, y0%, x1%, y1%, fl%, t$)
-LOCAL ind%
+DEF PROCicon(w%, x0%, y0%, x1%, y1%, fl%, t$, v$)
+LOCAL ind%, val%
 DIM ind% LEN(t$)+2:$ind%=t$
+val%=-1
+IF v$<>"" THEN DIM val% LEN(v$)+2:$val%=v$
 b%!0=w%:b%!4=x0%:b%!8=y0%:b%!12=x1%:b%!16=y1%:b%!20=fl% OR &100
-b%!24=ind%:b%!28=-1:b%!32=LEN(t$)+1
+b%!24=ind%:b%!28=val%:b%!32=LEN(t$)+1
 SYS "Wimp_CreateIcon",,b%
 ENDPROC
 

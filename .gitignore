@@ -2,7 +2,6 @@ build/
 tests/fx/
 __pycache__/
 *.pyc
-CLAUDE.md
 *START-HERE*.md
 handoffs/
 release/
