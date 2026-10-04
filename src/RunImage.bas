@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.04 (04 Oct 2026)"
+app$="NetStats":version$="1.05-rc1 (04 Oct 2026)"
 quit%=FALSE:task%=0
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -41,11 +41,12 @@ PROCdetect_stack
 PROCalloc
 PROCload_stats_table
 PROCload_choices
+PROCload_usage:PROCsession_reset
 PROCcreate_windows
 PROCcreate_menu
 PROCiconbar
 SYS "OS_ReadMonotonicTime" TO last%
-next%=FNtadd(last%,interval%)
+next%=FNtadd(last%,interval%):usave%=last%
 PROCsample(TRUE)
 FOR j%=0 TO NWIN%-1
   IF wwasopen%(j%) THEN PROCopen(j%)
@@ -58,13 +59,14 @@ REM Socket SWIs, X form (works even if the module is not present)
 XSysctl%=&6121A:XInternalLookup%=&61221:XSocketVersion%=&61222
 CTL_NET%=4:PF_INET%=2:PF_ROUTE%=17:NET_RT_IFLIST%=3
 RTM_NEWADDR%=&C:RTM_IFINFO%=&E
-RTA_NETMASK%=4:RTA_IFP%=&10:RTA_IFA%=&20
+RTA_NETMASK%=4:RTA_IFP%=&10:RTA_IFA%=&20:NET_RT_DUMP%=1
 AF_INET%=2:AF_LINK%=18
 iffup%=1:iffloop%=8:iffrun%=&40
 interval%=100:HN%=300:LH%=40:topm%=12
 MAXIF%=24:MAXL%=400
 REM window indices
-WMON%=0:WIF%=1:WPROT%=2:WCONN%=3:NWIN%=4
+WMON%=0:WIF%=1:WPROT%=2:WCONN%=3:WUSE%=4:WNET%=5:NWIN%=6
+MAXDAYS%=400:MAXRT%=120
 ENDPROC
 
 DEF PROCalloc
@@ -80,7 +82,14 @@ DIM rin(MAXIF%), rout(MAXIF%), g6%(7), cw$(10)
 ifn%=0:ifok%=FALSE:iferr$=""
 DIM hin(HN%), hout(HN%):hpos%=0:hcount%=0
 DIM L$(NWIN%-1,MAXL%), nlines%(NWIN%-1), tab%(NWIN%-1,8), wh%(NWIN%-1), wopen%(NWIN%-1)
-DIM lastn%(NWIN%-1)
+DIM lastn%(NWIN%-1), P$(NWIN%-1,MAXL%), pn%(NWIN%-1)
+REM data usage: one entry per day, plus this session
+DIM udate$(MAXDAYS%), udin(MAXDAYS%), udout(MAXDAYS%):un%=0
+sessin=0:sessout=0:sessstart$="":usave%=0
+REM chosen interface ("" = all) and the menu of interfaces
+selif$="":DIM ifmname$(MAXIF%+1)
+REM routes and network settings
+DIM rtbuf% 32768, vbuf% 256:rtn%=0:DIM rt$(MAXRT%):gw4$="":gw6$="":rterr$="":netstamp%=0
 totin=0:totout=0:sumib=0:sumob=0:nactive%=0:srcnote$=""
 bits%=FALSE:loopback%=FALSE:autoconn%=FALSE:ibrates%=TRUE
 DIM wpos%(NWIN%-1,3), wposok%(NWIN%-1), wwasopen%(NWIN%-1)
@@ -163,7 +172,7 @@ CASE reason% OF
   WHEN 17,18
     CASE b%!16 OF
       WHEN 0:quit%=TRUE
-      WHEN &808C1,&808C2,&808C3:PROCtw_message
+      WHEN &808C1,&808C2,&808C3:PROCtw_message(reason%)
     ENDCASE
 ENDCASE
 ENDPROC
@@ -171,6 +180,7 @@ ENDPROC
 DEF PROCshutdown
 PROCtw_kill
 PROCsave_choices
+PROCsave_usage
 SYS "XWimp_CloseDown",task%,&4B534154
 ENDPROC
 
@@ -208,17 +218,20 @@ IF stack% THEN
   PROCread_stats(dt)
 ENDIF
 PROCtotals
+PROCusage_add(dt)
 PROCiconbar_text
 hin(hpos%)=totin:hout(hpos%)=totout
 hpos%=(hpos%+1) MOD HN%:IF hcount%<HN% THEN hcount%+=1
 IF first% THEN hcount%=0
 last%=now%
-PROCbuild_text
+IF wopen%(WNET%) AND FNtdiff(now%,netstamp%)>=1000 THEN PROCbuild_one(WNET%)
 FOR j%=0 TO NWIN%-1
   IF wopen%(j%) THEN
+    IF j%<>WCONN% AND j%<>WNET% THEN PROCbuild_one(j%)
     IF j%<>WCONN% THEN PROCrefresh(j%)
   ENDIF
 NEXT
+IF FNtdiff(now%,usave%)>=30000 THEN PROCsave_usage:usave%=now%
 IF wopen%(WCONN%) AND autoconn% THEN
   IF FNtdiff(now%,connstamp%)>=1000 THEN PROCconnections
 ENDIF
@@ -230,9 +243,10 @@ LOCAL j%
 totin=0:totout=0:sumib=0:sumob=0:nactive%=0
 IF ifok% THEN
   srcnote$=""
+  IF selif$<>"" AND FNfindname(selif$)<0 THEN srcnote$=selif$+" is not present"
   j%=0
   WHILE j%<ifn%
-    IF loopback% OR (ifflags%(j%) AND iffloop%)=0 THEN
+    IF FNcounted(j%) THEN
       totin+=rin(j%):totout+=rout(j%):sumib+=ib(j%):sumob+=ob(j%)
       IF (ifflags%(j%) AND iffup%) THEN nactive%+=1
     ENDIF
@@ -420,6 +434,20 @@ FOR i%=0 TO nb%-1
   ENDIF
 NEXT
 =n%
+
+REM is interface j% included in the totals?
+DEF FNcounted(j%)
+IF selif$<>"" THEN =(ifname$(j%)=selif$)
+=(loopback% OR (ifflags%(j%) AND iffloop%)=0)
+
+DEF FNfindname(n$)
+LOCAL j%
+j%=0
+WHILE j%<ifn%
+  IF ifname$(j%)=n$ THEN =j%
+  j%+=1
+ENDWHILE
+=-1
 
 DEF FNslot(idx%)
 LOCAL j%
@@ -724,13 +752,25 @@ REM ===========================================================================
 REM Text for the windows. Columns are separated by TAB; a leading "#" marks
 REM a heading line, "~" a note in grey.
 REM ===========================================================================
+REM rebuild the text of the open windows only
 DEF PROCbuild_text
-PROCtext_ifaces
-PROCtext_stats
+LOCAL j%
+FOR j%=0 TO NWIN%-1
+  IF wopen%(j%) THEN PROCbuild_one(j%)
+NEXT
+ENDPROC
+
+DEF PROCbuild_one(j%)
+CASE j% OF
+  WHEN WIF%:PROCtext_ifaces
+  WHEN WPROT%:PROCtext_stats
+  WHEN WUSE%:PROCtext_usage
+  WHEN WNET%:PROCread_routes:PROCtext_net:SYS "OS_ReadMonotonicTime" TO netstamp%
+ENDCASE
 ENDPROC
 
 DEF PROCaddl(w%, s$)
-IF nlines%(w%)>MAXL% THEN ENDPROC
+IF nlines%(w%)>=MAXL% THEN ENDPROC
 L$(w%,nlines%(w%))=s$:nlines%(w%)+=1
 ENDPROC
 
@@ -801,11 +841,15 @@ wh%(WMON%)=FNwindow("NetStats",600,300,1600,1200,&A7000002,200,160)
 wh%(WIF%)=FNwindow("Interfaces",1060,640,1400,4000,&BF000002,0,0)
 wh%(WPROT%)=FNwindow("Protocol statistics",820,640,1000,4000,&BF000002,0,0)
 wh%(WCONN%)=FNwindow("Connections",1300,560,1400,8000,&BF000002,0,0)
+wh%(WUSE%)=FNwindow("Data usage",900,600,1000,4000,&BF000002,0,0)
+wh%(WNET%)=FNwindow("Network",1060,560,1400,8000,&BF000002,0,0)
 REM tab stops (negative = right aligned at that x)
 tab%(WIF%,0)=16:tab%(WIF%,1)=150:tab%(WIF%,2)=-380:tab%(WIF%,3)=-560:tab%(WIF%,4)=-770:tab%(WIF%,5)=-900:tab%(WIF%,6)=-1030
 tab%(WPROT%,0)=16:tab%(WPROT%,1)=-600:tab%(WPROT%,2)=-790
 REM queue columns right-aligned with room for their headings (~110 wide)
 tab%(WCONN%,0)=16:tab%(WCONN%,1)=100:tab%(WCONN%,2)=470:tab%(WCONN%,3)=840:tab%(WCONN%,4)=-1130:tab%(WCONN%,5)=-1270
+tab%(WUSE%,0)=16:tab%(WUSE%,1)=-520:tab%(WUSE%,2)=-700:tab%(WUSE%,3)=-880
+tab%(WNET%,0)=16:tab%(WNET%,1)=220:tab%(WNET%,2)=420:tab%(WNET%,3)=780:tab%(WNET%,4)=880
 PROCcreate_info
 ENDPROC
 
@@ -834,7 +878,7 @@ FOR i%=0 TO 4
   IF i%=4 THEN v$=version$
   y%=-8-i%*52
   PROCicon(info%,8,y%-48,152,y%,&17000211,l$,"")
-  PROCicon(info%,152,y%-48,602,y%,&1700613D,v$,"R2")
+  PROCicon(info%,152,y%-48,602,y%,&1700013D,v$,"R2")
 NEXT
 ENDPROC
 DATA Name:,NetStats
@@ -936,7 +980,9 @@ ENDIF
 b%!28=-1
 SYS "Wimp_OpenWindow",,b%
 wopen%(j%)=TRUE
+PROCbuild_one(j%)
 PROCset_extent(j%)
+IF j%<>WMON% AND j%<>WCONN% THEN PROCrefresh_full(j%)
 IF j%=WCONN% THEN PROCconnections
 ENDPROC
 
@@ -962,10 +1008,39 @@ b%!0=0:b%!4=-h%:b%!8=1400:b%!12=0
 SYS "Wimp_SetExtent",wh%(j%),b%
 ENDPROC
 
+REM Update a window. Text windows only repaint the lines whose text
+REM changed since the last update, so the rest doesn't flicker.
 DEF PROCrefresh(j%)
-LOCAL more%
+LOCAL i%, i0%, n%
+IF j%=WMON% OR nlines%(j%)<>pn%(j%) THEN PROCrefresh_full(j%):ENDPROC
+n%=nlines%(j%):i%=0
+WHILE i%<n%
+  IF L$(j%,i%)<>P$(j%,i%) THEN
+    i0%=i%
+    WHILE i%<n% AND L$(j%,i%)<>P$(j%,i%)
+      P$(j%,i%)=L$(j%,i%):i%+=1
+    ENDWHILE
+    PROCupdate_area(j%,-topm%-i%*LH%,-topm%-i0%*LH%)
+  ELSE
+    i%+=1
+  ENDIF
+ENDWHILE
+ENDPROC
+
+DEF PROCrefresh_full(j%)
+LOCAL i%
 PROCset_extent(j%)
-b%!0=wh%(j%):b%!4=-100000:b%!8=-100000:b%!12=100000:b%!16=100000
+IF j%<>WMON% THEN
+  IF nlines%(j%)>0 THEN FOR i%=0 TO nlines%(j%)-1:P$(j%,i%)=L$(j%,i%):NEXT
+  pn%(j%)=nlines%(j%)
+ENDIF
+PROCupdate_area(j%,-100000,100000)
+ENDPROC
+
+REM redraw part of a window's work area (y0 to y1, work area coordinates)
+DEF PROCupdate_area(j%, y0%, y1%)
+LOCAL more%
+b%!0=wh%(j%):b%!4=-100000:b%!8=y0%:b%!12=100000:b%!16=y1%
 SYS "Wimp_UpdateWindow",,b% TO more%
 WHILE more%
   SYS "Wimp_SetColour",128+0:CLG
@@ -1042,6 +1117,7 @@ IF stack%=0 THEN
   s$="No Internet module loaded"
 ELSE
   IF srcnote$<>"" THEN s$=srcnote$ ELSE s$=FNbytes(sumib)+" down, "+FNbytes(sumob)+" up since start-up"
+  IF selif$<>"" AND srcnote$="" THEN s$=selif$+": "+s$
 ENDIF
 PROCtext(s$,ox%+16,oy%-80)
 gx0%=ox%+16:gx1%=ox%+vw%-16:gy1%=oy%-104:gy0%=oy%-vh%+16
@@ -1134,22 +1210,25 @@ IF cmd$="" THEN
   PROCaddl(WCONN%,"~The ROD stack installs it with its OpenBSD tools; once it is on")
   PROCaddl(WCONN%,"~the path, click in this window to look again.")
   SYS "OS_ReadMonotonicTime" TO connstamp%
-  PROCset_extent(WCONN%)
-  IF wopen%(WCONN%) THEN PROCrefresh(WCONN%)
+  IF wopen%(WCONN%) THEN PROCrefresh_full(WCONN%)
   ENDPROC
 ENDIF
 conncmd$=cmd$:crn%=0:cpart$="":conntask%=0
-SYS "XWimp_StartTask","TaskWindow """+cmd$+""" -wimpslot 2048K -name NetStats -quit -task &"+STR$~task%+" -txt &"+STR$~conntxt% TO ;f%
+SYS "XWimp_StartTask","TaskWindow """+cmd$+""" -wimpslot 2048K -name NetStats -quit -task &"+FNhex8(task%)+" -txt &"+FNhex8(conntxt%) TO ;f%
 IF f% AND 1 THEN ENDPROC
 connbusy%=TRUE
 SYS "OS_ReadMonotonicTime" TO connstart%
 IF nlines%(WCONN%)=0 THEN PROCaddl(WCONN%,"~Reading connections...")
-IF wopen%(WCONN%) THEN PROCrefresh(WCONN%)
+IF wopen%(WCONN%) THEN PROCrefresh_full(WCONN%)
 ENDPROC
 
 REM TaskWindow messages: Ego (child started), Output (text), Morio (finished)
-DEF PROCtw_message
-LOCAL n%, i%, c%
+DEF PROCtw_message(rs%)
+LOCAL n%, i%, c%, snd%
+REM the PRM asks the parent to acknowledge each TaskWindow_Output
+REM (the Wimp writes our handle into +4 when we send, so keep the sender)
+snd%=b%!4
+IF rs%=18 AND b%!16=&808C1 THEN b%!12=b%!8:SYS "XWimp_SendMessage",19,b%,snd%:b%!4=snd%
 CASE b%!16 OF
   WHEN &808C2
     IF b%!20=conntxt% THEN conntask%=b%!4
@@ -1174,8 +1253,7 @@ CASE b%!16 OF
     nlines%(WCONN%)=0
     PROCparse_conn(conncmd$)
     SYS "OS_ReadMonotonicTime" TO connstamp%
-    PROCset_extent(WCONN%)
-    IF wopen%(WCONN%) THEN PROCrefresh(WCONN%)
+    IF wopen%(WCONN%) THEN PROCrefresh_full(WCONN%)
 ENDCASE
 ENDPROC
 
@@ -1187,6 +1265,8 @@ IF connbusy% AND conntask%<>0 THEN
 ENDIF
 connbusy%=FALSE:conntask%=0
 ENDPROC
+
+DEF FNhex8(x%)=RIGHT$("0000000"+STR$~x%,8)
 
 DEF FNexists(f$)
 LOCAL t%, fl%
@@ -1253,7 +1333,7 @@ DEF PROCclick
 LOCAL w%, bt%, j%
 w%=b%!12:bt%=b%!8
 IF w%=-2 THEN
-  IF bt%=2 THEN PROCshow_menu(b%!0-64,96+NMI%*44+2*24):ENDPROC
+  IF bt%=2 THEN PROCshow_menu(b%!0-64,96+NMI%*44+3*24):ENDPROC
   IF bt%=4 THEN PROCopen(WMON%)
   IF bt%=1 THEN PROCopen(WIF%)
   ENDPROC
@@ -1261,11 +1341,12 @@ ENDIF
 IF bt%=2 THEN PROCshow_menu(b%!0-64,b%!4):ENDPROC
 j%=FNwhich(w%)
 IF j%=WCONN% THEN PROCconnections
+IF j%=WNET% THEN PROCbuild_one(WNET%):PROCrefresh_full(WNET%)
 ENDPROC
 
 DEF PROCcreate_menu
 LOCAL i%, t$, fl%, tx%
-NMI%=10
+NMI%=14
 DIM menu% 28+24*NMI%, mtext%(NMI%)
 $menu%="NetStats":menu%?12=7:menu%?13=2:menu%?14=7:menu%?15=0
 menu%!16=25*16:menu%!20=44:menu%!24=0
@@ -1279,17 +1360,48 @@ FOR i%=0 TO NMI%-1
 NEXT
 menu%!(28+(NMI%-1)*24)=menu%!(28+(NMI%-1)*24) OR &80
 menu%!32=info%
+REM the Interface submenu, filled in each time the menu opens
+DIM ifmenu% 28+24*(MAXIF%+1), ifmtext%(MAXIF%+1)
+$ifmenu%="Interface":ifmenu%?12=7:ifmenu%?13=2:ifmenu%?14=7:ifmenu%?15=0
+ifmenu%!16=16*16:ifmenu%!20=44:ifmenu%!24=0
+FOR i%=0 TO MAXIF%
+  DIM tx% 24:ifmtext%(i%)=tx%:$tx%=""
+  ifmenu%!(28+i%*24)=0:ifmenu%!(32+i%*24)=-1:ifmenu%!(36+i%*24)=&07000121
+  ifmenu%!(40+i%*24)=tx%:ifmenu%!(44+i%*24)=-1:ifmenu%!(48+i%*24)=24
+NEXT
+menu%!(32+7*24)=ifmenu%
 ENDPROC
 DATA Info,0
 DATA Monitor,0
 DATA Interfaces,0
 DATA Protocols,0
-DATA Connections,2
+DATA Connections,0
+DATA Data usage,0
+DATA Network,2
+DATA Interface,0
 DATA Show bits/s,0
 DATA Include loopback,0
 DATA Rates on icon bar,0
 DATA Auto-refresh connections,2
+DATA Reset session totals,2
 DATA Quit,0
+
+REM "All interfaces" then one item per interface, the chosen one ticked
+DEF PROCfill_ifmenu
+LOCAL k%, f%
+ifmname$(0)="":$ifmtext%(0)="All interfaces"
+k%=1
+WHILE k%<=ifn% AND k%<=MAXIF%
+  ifmname$(k%)=ifname$(k%-1):$ifmtext%(k%)=LEFT$(ifname$(k%-1),20)
+  k%+=1
+ENDWHILE
+FOR f%=0 TO k%-1
+  ifmenu%!(28+f%*24)=0
+  IF ifmname$(f%)=selif$ THEN ifmenu%!(28+f%*24)=1
+  IF f%=0 THEN ifmenu%!(28+f%*24)=ifmenu%!(28+f%*24) OR 2
+NEXT
+ifmenu%!(28+(k%-1)*24)=ifmenu%!(28+(k%-1)*24) OR &80
+ENDPROC
 
 DEF PROCtick(i%, on%)
 IF on% THEN menu%!(28+i%*24)=menu%!(28+i%*24) OR 1 ELSE menu%!(28+i%*24)=menu%!(28+i%*24) AND NOT 1
@@ -1297,9 +1409,10 @@ ENDPROC
 
 DEF PROCshow_menu(x%, y%)
 LOCAL j%
-PROCtick(5,bits%):PROCtick(6,loopback%):PROCtick(7,ibrates%):PROCtick(8,autoconn%)
-REM items 1-4 are the windows: tick the ones that are open
+PROCtick(8,bits%):PROCtick(9,loopback%):PROCtick(10,ibrates%):PROCtick(11,autoconn%)
+REM items 1-6 are the windows: tick the ones that are open
 FOR j%=0 TO NWIN%-1:PROCtick(j%+1,wopen%(j%)):NEXT
+PROCfill_ifmenu
 mx%=x%:my%=y%
 SYS "Wimp_CreateMenu",,menu%,x%,y%
 ENDPROC
@@ -1309,17 +1422,267 @@ LOCAL i%
 i%=!b%
 SYS "Wimp_GetPointerInfo",,tmp%
 CASE i% OF
-  WHEN 1,2,3,4
+  WHEN 1,2,3,4,5,6
     REM a ticked (open) window is closed again, an unticked one opened
     IF wopen%(i%-1) THEN PROCclosewin(i%-1) ELSE PROCopen(i%-1)
-  WHEN 5:bits%=NOT bits%:PROCbuild_text:PROCrefresh_all:PROCiconbar_text
-  WHEN 6:loopback%=NOT loopback%:PROCtotals:PROCrefresh_all:PROCiconbar_text
-  WHEN 7:ibrates%=NOT ibrates%:PROCiconbar_make:PROCiconbar_text
-  WHEN 8:autoconn%=NOT autoconn%
-  WHEN 9:quit%=TRUE
+  WHEN 7
+    IF b%!4>=0 AND b%!4<=MAXIF% THEN
+      IF ifmname$(b%!4)<>selif$ THEN selif$=ifmname$(b%!4):hcount%=0:PROCtotals:PROCbuild_text:PROCrefresh_all:PROCiconbar_text
+    ENDIF
+  WHEN 8:bits%=NOT bits%:PROCbuild_text:PROCrefresh_all:PROCiconbar_text
+  WHEN 9:loopback%=NOT loopback%:hcount%=0:PROCtotals:PROCrefresh_all:PROCiconbar_text
+  WHEN 10:ibrates%=NOT ibrates%:PROCiconbar_make:PROCiconbar_text
+  WHEN 11:autoconn%=NOT autoconn%
+  WHEN 12:PROCsession_reset:IF wopen%(WUSE%) THEN PROCbuild_one(WUSE%):PROCrefresh(WUSE%)
+  WHEN 13:quit%=TRUE
 ENDCASE
 IF NOT quit% THEN PROCsave_choices
 IF (tmp%!8 AND 1) AND NOT quit% THEN PROCshow_menu(mx%,my%)
+ENDPROC
+
+REM ===========================================================================
+REM Data usage: bytes counted while NetStats runs, per day and this session.
+REM Saved in <Choices$Write>.NetStats.Usage as "YYYY-MM-DD down up" lines.
+REM ===========================================================================
+DEF PROCusage_add(dt)
+LOCAL j%, din, dout
+IF stack%=0 THEN ENDPROC
+IF ifok% THEN
+  j%=0
+  WHILE j%<ifn%
+    IF (ifflags%(j%) AND iffloop%)=0 THEN din+=rin(j%)*dt:dout+=rout(j%)*dt
+    j%+=1
+  ENDWHILE
+ELSE
+  IF tcpok% THEN din=st_rate(tcp_rcvbyte%)*dt:dout=st_rate(tcp_sndbyte%)*dt
+ENDIF
+sessin+=din:sessout+=dout
+PROCusage_day(FNdate_of(TIME$),din,dout)
+ENDPROC
+
+REM add to the entry for day d$ (the last entry, or a new one)
+DEF PROCusage_day(d$, din, dout)
+LOCAL i%
+IF un%=0 THEN
+  un%=1:udate$(0)=d$:udin(0)=0:udout(0)=0
+ELSE
+  IF udate$(un%-1)<>d$ THEN
+    IF un%>MAXDAYS% THEN
+      FOR i%=1 TO un%-1:udate$(i%-1)=udate$(i%):udin(i%-1)=udin(i%):udout(i%-1)=udout(i%):NEXT
+      un%-=1
+    ENDIF
+    udate$(un%)=d$:udin(un%)=0:udout(un%)=0:un%+=1
+  ENDIF
+ENDIF
+udin(un%-1)+=din:udout(un%-1)+=dout
+ENDPROC
+
+REM "Sun,04 Oct 2026.12:34:56" -> "2026-10-04"
+DEF FNdate_of(t$)
+LOCAL m%
+m%=(INSTR("JanFebMarAprMayJunJulAugSepOctNovDec",MID$(t$,8,3))+2) DIV 3
+=MID$(t$,12,4)+"-"+RIGHT$("0"+STR$m%,2)+"-"+MID$(t$,5,2)
+
+DEF PROCsession_reset
+sessin=0:sessout=0:sessstart$=MID$(TIME$,17,5)+" "+MID$(TIME$,5,6)
+ENDPROC
+
+REM whole number as plain digits (no commas, no exponent)
+DEF FNplain(x)
+LOCAL s$, i%, r$
+s$=FNnum(x)
+FOR i%=1 TO LEN(s$)
+  IF MID$(s$,i%,1)<>"," THEN r$+=MID$(s$,i%,1)
+NEXT
+=r$
+
+DEF PROCload_usage
+LOCAL h%, f%, l$
+un%=0
+SYS "XOS_Find",&4F,"Choices:NetStats.Usage" TO h% ;f%
+IF (f% AND 1) OR h%=0 THEN ENDPROC
+WHILE NOT EOF#h%
+  l$=GET$#h%
+  IF FNsplit(l$,cw$())=3 AND LEN(cw$(0))=10 THEN
+    IF MID$(cw$(0),5,1)="-" THEN PROCusage_day(cw$(0),VAL(cw$(1)),VAL(cw$(2)))
+  ENDIF
+ENDWHILE
+CLOSE#h%
+ENDPROC
+
+DEF PROCsave_usage
+LOCAL h%, f%, j%, d$
+IF un%=0 THEN ENDPROC
+d$="<Choices$Write>.NetStats"
+SYS "XOS_ReadVarVal","Choices$Write",tmp%,-1,0,0 TO ,,j% ;f%
+IF j%=0 THEN ENDPROC
+SYS "XOS_File",8,d$,0 TO ;f%
+SYS "XOS_Find",&8F,d$+".Usage" TO h% ;f%
+IF (f% AND 1) OR h%=0 THEN ENDPROC
+FOR j%=0 TO un%-1
+  BPUT#h%,udate$(j%)+" "+FNplain(udin(j%))+" "+FNplain(udout(j%))
+NEXT
+CLOSE#h%
+SYS "XOS_File",18,d$+".Usage",&FFF
+ENDPROC
+
+DEF PROCtext_usage
+LOCAL T$, i%, k%, today$, m$, mi, mo, n%
+T$=CHR$9
+nlines%(WUSE%)=0
+PROCaddl(WUSE%,"~Counted while NetStats is running; loopback (lo0) is not included.")
+PROCaddl(WUSE%,"#"+T$+"Down"+T$+"Up"+T$+"Total")
+PROCaddl(WUSE%,FNuse_row("This session (since "+sessstart$+")",sessin,sessout))
+today$=FNdate_of(TIME$)
+IF un%>0 THEN
+  IF udate$(un%-1)=today$ THEN PROCaddl(WUSE%,FNuse_row("Today",udin(un%-1),udout(un%-1)))
+ENDIF
+m$=LEFT$(today$,7):mi=0:mo=0
+FOR i%=0 TO un%-1
+  IF LEFT$(udate$(i%),7)=m$ THEN mi+=udin(i%):mo+=udout(i%)
+NEXT
+PROCaddl(WUSE%,FNuse_row("This month",mi,mo))
+IF un%=0 THEN ENDPROC
+PROCaddl(WUSE%,"")
+PROCaddl(WUSE%,"#Last 14 days"+T$+"Down"+T$+"Up"+T$+"Total")
+FOR i%=un%-1 TO un%-14 STEP -1
+  IF i%>=0 THEN PROCaddl(WUSE%,FNuse_row(udate$(i%),udin(i%),udout(i%)))
+NEXT
+PROCaddl(WUSE%,"")
+PROCaddl(WUSE%,"#Last 12 months"+T$+"Down"+T$+"Up"+T$+"Total")
+i%=un%-1:n%=0
+WHILE i%>=0 AND n%<12
+  m$=LEFT$(udate$(i%),7):mi=0:mo=0:k%=TRUE
+  WHILE k%
+    mi+=udin(i%):mo+=udout(i%):i%-=1
+    IF i%<0 THEN k%=FALSE ELSE IF LEFT$(udate$(i%),7)<>m$ THEN k%=FALSE
+  ENDWHILE
+  PROCaddl(WUSE%,FNuse_row(m$,mi,mo)):n%+=1
+ENDWHILE
+ENDPROC
+
+DEF FNuse_row(l$, a, b)=l$+CHR$9+FNbytes(a)+CHR$9+FNbytes(b)+CHR$9+FNbytes(a+b)
+
+REM ===========================================================================
+REM Network: host name, DNS, gateways and the routing table
+REM (net.route.0.0.dump, RTM_GET messages)
+REM ===========================================================================
+DEF PROCread_routes
+LOCAL n%
+rtn%=0:gw4$="":gw6$="":rterr$=""
+IF stack%=0 THEN ENDPROC
+PROCmib(CTL_NET%,PF_ROUTE%,0,0,NET_RT_DUMP%,0)
+n%=FNsysctl(mib%,6,rtbuf%,32768)
+IF n%<0 THEN rterr$=sysctl_err$:ENDPROC
+PROCparse_routes(rtbuf%,n%)
+ENDPROC
+
+DEF PROCparse_routes(buf%, n%)
+LOCAL p%, ml%, hdr%, idx%, addrs%, fl%, sa%, bit%, l%, dst%, gw%, nm%, d$, g$, f$, i$, fam%, skip%
+p%=buf%
+WHILE p%+4<=buf%+n% AND rtn%<MAXRT%
+  ml%=FNu16(p%)
+  REM a broken length ends the walk
+  IF ml%<4 THEN ml%=buf%+n%-p%+4:p%?3=0
+  IF p%?3=4 THEN
+    IF stack%=2 THEN
+      hdr%=FNu16(p%+4):idx%=FNu16(p%+6):addrs%=p%!12:fl%=p%!16:skip%=&600600
+    ELSE
+      hdr%=92:idx%=FNu16(p%+4):fl%=p%!8:addrs%=p%!12:skip%=&E00400
+    ENDIF
+    REM leave out ARP/ND, local, broadcast and multicast entries
+    IF (fl% AND skip%)=0 THEN
+      dst%=0:gw%=0:nm%=0:sa%=p%+hdr%
+      FOR bit%=0 TO 7
+        IF addrs% AND (1<<bit%) THEN
+          IF bit%=0 THEN dst%=sa%
+          IF bit%=1 THEN gw%=sa%
+          IF bit%=2 THEN nm%=sa%
+          l%=?sa%:IF l%=0 THEN sa%+=4 ELSE sa%+=((l%-1) OR 3)+1
+        ENDIF
+      NEXT
+      IF dst% THEN PROCadd_route(dst%,gw%,nm%,fl%,idx%)
+    ENDIF
+  ENDIF
+  p%+=ml%
+ENDWHILE
+ENDPROC
+
+DEF PROCadd_route(dst%, gw%, nm%, fl%, idx%)
+LOCAL fam%, d$, g$, f$, i$, T$, j%, pb%
+T$=CHR$9:fam%=dst%?1
+IF fam%=AF_INET% THEN
+  d$=FNip4(dst%+4)
+  IF fl% AND 4 THEN pb%=32 ELSE IF nm% THEN pb%=FNmaskbits(nm%,4,4) ELSE pb%=-1
+  IF d$="0.0.0.0" AND pb%<=0 THEN d$="default" ELSE IF pb%>=0 AND pb%<32 THEN d$+="/"+STR$pb%
+ELSE
+  IF fam%<>24 AND fam%<>28 THEN ENDPROC
+  d$=FNip6(dst%+8,"")
+  IF fl% AND 4 THEN pb%=128 ELSE IF nm% THEN pb%=FNmaskbits(nm%,8,16) ELSE pb%=-1
+  IF d$="::" AND pb%<=0 THEN d$="default" ELSE IF pb%>=0 AND pb%<128 THEN d$+="/"+STR$pb%
+ENDIF
+g$=FNsa_text(gw%)
+f$="":IF fl% AND 1 THEN f$+="U"
+IF fl% AND 2 THEN f$+="G"
+IF fl% AND 4 THEN f$+="H"
+IF fl% AND &800 THEN f$+="S"
+IF fl% AND &10 THEN f$+="D"
+j%=FNfind(idx%):IF j%>=0 THEN i$=ifname$(j%) ELSE i$="if"+STR$idx%
+IF d$="default" AND (fl% AND 2) THEN
+  IF fam%=AF_INET% THEN gw4$=g$+" ("+i$+")" ELSE gw6$=g$+" ("+i$+")"
+ENDIF
+IF d$="default" AND fam%<>AF_INET% THEN d$="default (IPv6)"
+IF LEN(d$)>22 THEN
+  rt$(rtn%)=d$:rtn%+=1
+  IF rtn%<MAXRT% THEN rt$(rtn%)=T$+T$+g$+T$+f$+T$+i$:rtn%+=1
+ELSE
+  rt$(rtn%)=d$+T$+T$+g$+T$+f$+T$+i$:rtn%+=1
+ENDIF
+ENDPROC
+
+REM a gateway sockaddr as text: an address, or the interface for direct routes
+DEF FNsa_text(sa%)
+LOCAL fam%, j%
+IF sa%=0 THEN =""
+fam%=sa%?1
+IF fam%=AF_INET% THEN =FNip4(sa%+4)
+IF fam%=24 OR fam%=28 THEN =FNip6(sa%+8,"")
+IF fam%=AF_LINK% THEN
+  j%=FNfind(FNu16(sa%+2))
+  IF j%>=0 THEN ="direct ("+ifname$(j%)+")"
+  ="direct"
+ENDIF
+=""
+
+REM read a system variable (own buffer: tmp% holds the pointer info in
+REM PROCmenu_select while windows are rebuilt)
+DEF FNvar(n$)
+LOCAL f%, l%
+SYS "XOS_ReadVarVal",n$,vbuf%,250,0,3 TO ,,l% ;f%
+IF f% AND 1 THEN =""
+vbuf%?l%=13
+=LEFT$($vbuf%,200)
+
+DEF PROCtext_net
+LOCAL T$, i%, v$
+T$=CHR$9
+nlines%(WNET%)=0
+PROCaddl(WNET%,"~Click in this window to refresh. Settings come from the Inet$ system variables.")
+PROCaddl(WNET%,"#This machine")
+v$=FNvar("Inet$HostName"):IF v$="" THEN v$="(not set)"
+PROCaddl(WNET%,"Host name"+T$+v$)
+v$=FNvar("Inet$LocalDomain"):IF v$<>"" THEN PROCaddl(WNET%,"Domain"+T$+v$)
+v$=FNvar("Inet$Resolvers"):IF v$="" THEN v$="(none set)"
+PROCaddl(WNET%,"DNS servers"+T$+v$)
+IF gw4$<>"" THEN PROCaddl(WNET%,"Gateway"+T$+gw4$) ELSE PROCaddl(WNET%,"Gateway"+T$+"(no default route)")
+IF gw6$<>"" THEN PROCaddl(WNET%,"IPv6 gateway"+T$+gw6$)
+PROCaddl(WNET%,"")
+IF rterr$<>"" THEN PROCaddl(WNET%,"~Routing table not available: "+rterr$):ENDPROC
+PROCaddl(WNET%,"#Destination"+T$+T$+"Gateway"+T$+"Flags"+T$+"Interface")
+IF rtn%=0 THEN PROCaddl(WNET%,"~No routes"):ENDPROC
+FOR i%=0 TO rtn%-1:PROCaddl(WNET%,rt$(i%)):NEXT
+PROCaddl(WNET%,"")
+PROCaddl(WNET%,"~Flags: U up, G via a gateway, H host, S static, D dynamic (redirect)")
 ENDPROC
 
 REM ===========================================================================
@@ -1340,6 +1703,7 @@ WHILE NOT EOF#h%
       WHEN "loopback":loopback%=(VAL(a$)<>0)
       WHEN "iconbar":ibrates%=(VAL(a$)<>0)
       WHEN "autoconn":autoconn%=(VAL(a$)<>0)
+      WHEN "interface":selif$=LEFT$(a$,16)
       WHEN "window"
         IF FNsplit(a$,cw$())>=6 THEN
           j%=VAL(cw$(0))
@@ -1368,6 +1732,7 @@ BPUT#h%,"bits "+STR$(-bits%)
 BPUT#h%,"loopback "+STR$(-loopback%)
 BPUT#h%,"iconbar "+STR$(-ibrates%)
 BPUT#h%,"autoconn "+STR$(-autoconn%)
+IF selif$<>"" THEN BPUT#h%,"interface "+selif$
 FOR j%=0 TO NWIN%-1
   !b%=wh%(j%)
   SYS "XWimp_GetWindowState",,b% TO ;f%
@@ -1380,6 +1745,6 @@ ENDPROC
 DEF PROCrefresh_all
 LOCAL j%
 FOR j%=0 TO NWIN%-1
-  IF wopen%(j%) THEN PROCrefresh(j%)
+  IF wopen%(j%) THEN PROCrefresh_full(j%)
 NEXT
 ENDPROC

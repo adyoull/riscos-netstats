@@ -77,6 +77,35 @@ stack%=2:fx$="":tcpfx$="fx/rod_tcp536":stfirst%=TRUE:PROCread_ifaces(1):PROCread
 PROCeq(STR$ifok%,"0"):PROCeq(srcnote$,"TCP data only (interface list unavailable)")
 PROCeq(FNnum(sumob),"30,064,771,077")
 
+PRINT "== routes (ROD)"
+stack%=2:fx$="fx/rod_iflist":PROCread_ifaces(1):rtfx$="fx/rod_routes":rtn%=0:PROCread_routes
+PROCeq(STR$rtn%,"6")
+PROCeq(FNshowtabs(rt$(0)),"default |  | 192.168.1.1 | UGS | en0")
+PROCeq(FNshowtabs(rt$(1)),"192.168.1.0/24 |  | direct (en0) | U | en0")
+PROCeq(FNshowtabs(rt$(2)),"127.0.0.1 |  | 127.0.0.1 | UH | lo0")
+PROCeq(gw4$,"192.168.1.1 (en0)"):PROCeq(gw6$,"fe80::1 (en0)")
+PROCeq(FNshowtabs(rt$(4)),"2001:db8:1234:5678::/64")
+PROCeq(FNshowtabs(rt$(5))," |  | direct (en0) | U | en0")
+PROCtext_net:PROCdump(WNET%)
+PRINT "== routes (old stack)"
+stack%=1:ifn%=0:fx$="fx/old_iflist":PROCread_ifaces(1):rtfx$="fx/old_routes":rtn%=0:PROCread_routes
+PROCeq(STR$rtn%,"2"):PROCeq(gw4$,"10.0.0.1 (eh0)"):PROCeq(FNshowtabs(rt$(1)),"10.0.0.0/16 |  | direct (eh0) | U | eh0")
+PRINT "== usage"
+PROCeq(FNdate_of("Sun,04 Oct 2026.12:34:56"),"2026-10-04"):PROCeq(FNdate_of("Mon,05 Jan 2026.00:00:01"),"2026-01-05")
+PROCeq(FNplain(21474837480),"21474837480")
+un%=0:PROCusage_day("2026-08-31",100,10):PROCusage_day("2026-09-01",1000,100):PROCusage_day("2026-09-01",24,4):PROCusage_day("2026-09-02",2048,0)
+PROCeq(STR$un%+" "+STR$udin(1)+" "+STR$udout(1),"3 1024 104")
+sessin=3072:sessout=1024:sessstart$="12:00 04 Oct":PROCtext_usage:PROCdump(WUSE%)
+PROCeq(FNshowtabs(L$(WUSE%,2)),"This session (since 12:00 04 Oct) | 3.0 KB | 1.0 KB | 4.0 KB")
+f%=FALSE:FOR i%=0 TO nlines%(WUSE%)-1:IF FNshowtabs(L$(WUSE%,i%))="2026-09 | 3.0 KB | 104 B | 3.1 KB" THEN f%=TRUE
+NEXT:PROCeq(STR$f%,"-1")
+PRINT "== interface choice"
+stack%=2:ifn%=0:fx$="fx/rod_iflist":PROCread_ifaces(1):fx$="fx/rod_iflist2":PROCread_ifaces(2)
+selif$="":loopback%=FALSE:PROCtotals:PROCeq(STR$totin,"125000")
+selif$="lo0":PROCtotals:PROCeq(STR$totin,"0"):PROCeq(srcnote$,"")
+selif$="wl0":PROCtotals:PROCeq(srcnote$,"wl0 is not present")
+selif$="en0":PROCtotals:PROCeq(STR$totin+" "+STR$totout,"125000 25000")
+selif$=""
 PRINT "== empty list"
 stack%=2:ifn%=0:PROCparse_iflist(ifbuf%,0):PROCeq(STR$ifn%,"0"):PROCtotals:PROCeq(STR$totin,"0")
 PRINT "== connections"
@@ -106,6 +135,7 @@ REM mock: fixtures instead of the stack
 DEF FNsysctl(m%, n%, buf%, size%)
 LOCAL f$, x%, l%
 IF m%!4=17 THEN f$=fx$
+IF m%!4=17 AND m%!16=1 THEN f$=rtfx$
 IF m%!4=2 AND m%!8=6 THEN f$=tcpfx$
 IF m%!4=2 AND m%!8=17 THEN f$="fx/rod_udp"
 IF m%!4=2 AND m%!8=0 THEN f$="fx/rod_ip"
@@ -114,3 +144,9 @@ x%=OPENIN(f$):l%=EXT#x%
 FOR i%=0 TO l%-1:buf%?i%=BGET#x%:NEXT
 CLOSE#x%
 =l%
+
+REM mock: system variables
+DEF FNvar(n$)
+IF n$="Inet$HostName" THEN ="pi4"
+IF n$="Inet$Resolvers" THEN ="192.168.1.1 1.1.1.1"
+=""

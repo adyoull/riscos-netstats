@@ -1,5 +1,5 @@
-NetStats 1.04 (04 Oct 2026)
-===========================
+NetStats 1.05-rc1 (04 Oct 2026)
+===============================
 
 Network statistics for RISC OS. NetStats shows how much your machine is
 sending and receiving, per network interface, with a live graph, plus the
@@ -32,7 +32,9 @@ Monitor
   scale follows the busiest moment on screen and is shown at the top left.
   Download is green, upload is red. You can resize the window.
   The rates are the sum of all interfaces except loopback (lo0), which
-  only carries traffic within this machine. See "Include loopback".
+  only carries traffic within this machine. See "Include loopback". To
+  watch one interface only (for example Wi-Fi), choose it from the
+  Interface submenu; the Monitor and the icon bar then show just that one.
 
 Interfaces
   Every interface the stack knows about: its name (e.g. en0, lo0), type,
@@ -54,11 +56,27 @@ Connections
   "Auto-refresh connections" in the menu to update it every 10 seconds
   while the window is open.
 
+Data usage
+  How much has been downloaded and uploaded: this session (since NetStats
+  started, or since "Reset session totals"), today, this month, the last
+  14 days and the last 12 months. Only traffic while NetStats is running
+  is counted, and loopback is left out. The figures are kept in
+  <Choices$Write>.NetStats.Usage, saved every 5 minutes and on quitting.
+
+Network
+  This machine's host name, domain, DNS servers and default gateway, and
+  the routing table (destination, gateway, flags, interface). Local,
+  broadcast, multicast and ARP entries are left out. It updates every 10
+  seconds while open; click in the window to update it at once.
+
 Menu
   Info                      about NetStats
   Monitor, Interfaces,
-  Protocols, Connections    open the windows; a tick shows which are
+  Protocols, Connections,
+  Data usage, Network       open the windows; a tick shows which are
                             open, and choosing a ticked one closes it
+  Interface >               show all interfaces, or just one, in the
+                            Monitor and on the icon bar
   Show bits/s               show rates in bits per second (kbit/s, Mbit/s,
                             powers of 1000) instead of bytes per second
                             (KB/s, MB/s, powers of 1024)
@@ -67,13 +85,15 @@ Menu
                             rates under the icon bar icon, e.g.
                             "v1.2M ^34K" (on by default)
   Auto-refresh connections  see Connections above
+  Reset session totals      start the "This session" figures again
   Quit
 
 
 Choices
 -------
 NetStats remembers which windows were open, where they were, and the
-menu options (bits/s, loopback, rates on icon bar, auto-refresh). They are
+menu options (bits/s, loopback, rates on icon bar, auto-refresh, the
+interface shown). They are
 saved whenever you change something in the menu and when NetStats quits,
 in <Choices$Write>.NetStats.Choices (a text file), and the windows are
 re-opened where you left them next time.
@@ -81,6 +101,7 @@ re-opened where you left them next time.
 
 Notes
 -----
+* Windows only redraw the lines that changed, so they don't flicker.
 * Counters are read once a second. All totals are since the stack started
   (normally since the machine was switched on).
 * The ROD stack counts in 64 bits, so the totals do not wrap. The old stack
@@ -106,6 +127,8 @@ R3 -> buffer length (updated), R4 = R5 = 0:
   4,2,6,21       net.inet.tcp.stats    - struct tcpstat (ROD)
   4,2,17,5       net.inet.udp.stats    - struct udpstat (ROD)
   4,2,0,33       net.inet.ip.stats     - struct ipstat  (ROD)
+  4,17,0,0,1,0   net.route.0.0.dump    - the routing table (RTM_GET
+                 messages: rt_msghdr + destination, gateway, netmask)
 
 The ROD stack uses OpenBSD 6.8's structures: ifm_hdrlen gives the header
 size and if_data's counters are 64 bits. The old stack uses 4.4BSD/FreeBSD

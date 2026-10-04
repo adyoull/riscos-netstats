@@ -143,3 +143,35 @@ for i, v in ((0, 3), (1, 4), (17, 100000), (27, 200000), (25, 999)):
     struct.pack_into('<I', t, 4 * i, v)
 open(os.path.join(out, 'old_tcp'), 'wb').write(bytes(t))
 print('fixtures written to', out)
+
+# ---------------------------------------------------------------- routing tables
+def rod_route(index, flags, sas, addrs):
+    hdrlen = 96
+    body = b''.join(sas)
+    h = struct.pack('<HBBHHHBBiiiiiiI', hdrlen + len(body), 5, 4, hdrlen, index, 0, 0, 0, addrs, flags, 0, 0, 0, 0, 0)
+    h += b'\0' * (hdrlen - len(h))
+    return h + body
+
+def old_route(index, flags, sas, addrs):
+    body = b''.join(sas)
+    h = struct.pack('<HBBHxxiiiiiiI', 92 + len(body), 5, 4, index, flags, addrs, 0, 0, 0, 0, 0)
+    h += b'\0' * (92 - len(h))
+    return h + body
+
+RTF_UP, RTF_GW, RTF_HOST, RTF_STATIC = 1, 2, 4, 0x800
+r = b''
+r += rod_route(1, RTF_UP | RTF_GW | RTF_STATIC, [sin([0, 0, 0, 0]), sin([192, 168, 1, 1]), sa_pad(bytes([0, 0, 0, 0]))], 7)
+r += rod_route(1, RTF_UP, [sin([192, 168, 1, 0]), sdl(1, 6, 'en0', mac), mask4(24)], 7)
+r += rod_route(1, RTF_UP | RTF_HOST | 0x200000, [sin([192, 168, 1, 50]), sdl(1, 6, 'en0', mac)], 3)     # local: skipped
+r += rod_route(1, RTF_UP | RTF_HOST | 0x400000, [sin([192, 168, 1, 255]), sdl(1, 6, 'en0', mac)], 3)    # broadcast: skipped
+r += rod_route(1, RTF_UP | RTF_HOST | 0x400, [sin([192, 168, 1, 2]), sdl(1, 6, 'en0', mac)], 3)         # ARP: skipped
+r += rod_route(3, RTF_UP | RTF_HOST, [sin([127, 0, 0, 1]), sin([127, 0, 0, 1])], 3)
+ll1 = [0xFE, 0x80, 0, 1] + [0] * 11 + [1]
+r += rod_route(1, RTF_UP | RTF_GW, [sin6([0] * 16), sin6(ll1), sa_pad(bytes([0, 0, 0, 0]))], 7)
+r += rod_route(1, RTF_UP, [sin6([0x20, 1, 0x0d, 0xb8, 0x12, 0x34, 0x56, 0x78] + [0] * 8), sdl(1, 6, 'en0', mac), mask6(64)], 7)
+open(os.path.join(out, 'rod_routes'), 'wb').write(r)
+o = b''
+o += old_route(1, RTF_UP | RTF_GW, [sin([0, 0, 0, 0]), sin([10, 0, 0, 1]), sa_pad(bytes([0, 0, 0, 0]))], 7)
+o += old_route(1, RTF_UP, [sin([10, 0, 0, 0]), sdl(1, 6, 'eh0', mac), mask4(16)], 7)
+o += old_route(1, RTF_UP | RTF_HOST | 0x800000, [sin([224, 0, 0, 1]), sdl(1, 6, 'eh0', mac)], 3)        # multicast: skipped
+open(os.path.join(out, 'old_routes'), 'wb').write(o)

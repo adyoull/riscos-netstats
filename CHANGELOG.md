@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.05-rc1 (04 Oct 2026)
+- New **Data usage** window: this session, today, this month, the last
+  14 days and 12 months (counted while NetStats runs; saved in
+  `<Choices$Write>.NetStats.Usage`). Menu: "Reset session totals".
+- New **Network** window: host name, domain, DNS servers, default
+  gateway and the routing table (from `net.route.0.0.dump`).
+- **Interface** submenu: show all interfaces or just one in the Monitor
+  and on the icon bar (saved in Choices).
+- Windows only redraw the lines that changed, so they no longer flicker
+  once a second, and text is only built for open windows.
+- TaskWindow_Output messages are now acknowledged, as the PRM asks.
+  Task handles are passed to TaskWindow as 8 hex digits. The program
+  information fields are display fields (no click action).
+- WimpSlot raised to 512K.
+
 ## 1.04 (04 Oct 2026)
 - Connections: the Recv-Q and Send-Q headings no longer overlap (wider
   queue columns; the window opens wider).
