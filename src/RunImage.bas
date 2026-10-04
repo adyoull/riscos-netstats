@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.05-rc1 (04 Oct 2026)"
+app$="NetStats":version$="1.05-rc2 (04 Oct 2026)"
 quit%=FALSE:task%=0
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -842,14 +842,14 @@ wh%(WIF%)=FNwindow("Interfaces",1060,640,1400,4000,&BF000002,0,0)
 wh%(WPROT%)=FNwindow("Protocol statistics",820,640,1000,4000,&BF000002,0,0)
 wh%(WCONN%)=FNwindow("Connections",1300,560,1400,8000,&BF000002,0,0)
 wh%(WUSE%)=FNwindow("Data usage",900,600,1000,4000,&BF000002,0,0)
-wh%(WNET%)=FNwindow("Network",1060,560,1400,8000,&BF000002,0,0)
+wh%(WNET%)=FNwindow("Network",1160,560,1400,8000,&BF000002,0,0)
 REM tab stops (negative = right aligned at that x)
 tab%(WIF%,0)=16:tab%(WIF%,1)=150:tab%(WIF%,2)=-380:tab%(WIF%,3)=-560:tab%(WIF%,4)=-770:tab%(WIF%,5)=-900:tab%(WIF%,6)=-1030
 tab%(WPROT%,0)=16:tab%(WPROT%,1)=-600:tab%(WPROT%,2)=-790
 REM queue columns right-aligned with room for their headings (~110 wide)
 tab%(WCONN%,0)=16:tab%(WCONN%,1)=100:tab%(WCONN%,2)=470:tab%(WCONN%,3)=840:tab%(WCONN%,4)=-1130:tab%(WCONN%,5)=-1270
 tab%(WUSE%,0)=16:tab%(WUSE%,1)=-520:tab%(WUSE%,2)=-700:tab%(WUSE%,3)=-880
-tab%(WNET%,0)=16:tab%(WNET%,1)=220:tab%(WNET%,2)=420:tab%(WNET%,3)=780:tab%(WNET%,4)=880
+tab%(WNET%,0)=16:tab%(WNET%,1)=240:tab%(WNET%,2)=420:tab%(WNET%,3)=880:tab%(WNET%,4)=980
 PROCcreate_info
 ENDPROC
 
@@ -1531,8 +1531,9 @@ LOCAL T$, i%, k%, today$, m$, mi, mo, n%
 T$=CHR$9
 nlines%(WUSE%)=0
 PROCaddl(WUSE%,"~Counted while NetStats is running; loopback (lo0) is not included.")
+PROCaddl(WUSE%,"~This session started "+sessstart$+" (Reset session totals is on the menu).")
 PROCaddl(WUSE%,"#"+T$+"Down"+T$+"Up"+T$+"Total")
-PROCaddl(WUSE%,FNuse_row("This session (since "+sessstart$+")",sessin,sessout))
+PROCaddl(WUSE%,FNuse_row("This session",sessin,sessout))
 today$=FNdate_of(TIME$)
 IF un%>0 THEN
   IF udate$(un%-1)=today$ THEN PROCaddl(WUSE%,FNuse_row("Today",udin(un%-1),udout(un%-1)))

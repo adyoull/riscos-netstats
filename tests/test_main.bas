@@ -96,7 +96,7 @@ PROCeq(FNplain(21474837480),"21474837480")
 un%=0:PROCusage_day("2026-08-31",100,10):PROCusage_day("2026-09-01",1000,100):PROCusage_day("2026-09-01",24,4):PROCusage_day("2026-09-02",2048,0)
 PROCeq(STR$un%+" "+STR$udin(1)+" "+STR$udout(1),"3 1024 104")
 sessin=3072:sessout=1024:sessstart$="12:00 04 Oct":PROCtext_usage:PROCdump(WUSE%)
-PROCeq(FNshowtabs(L$(WUSE%,2)),"This session (since 12:00 04 Oct) | 3.0 KB | 1.0 KB | 4.0 KB")
+PROCeq(FNshowtabs(L$(WUSE%,3)),"This session | 3.0 KB | 1.0 KB | 4.0 KB"):PROCeq(L$(WUSE%,1),"~This session started 12:00 04 Oct (Reset session totals is on the menu).")
 f%=FALSE:FOR i%=0 TO nlines%(WUSE%)-1:IF FNshowtabs(L$(WUSE%,i%))="2026-09 | 3.0 KB | 104 B | 3.1 KB" THEN f%=TRUE
 NEXT:PROCeq(STR$f%,"-1")
 PRINT "== interface choice"

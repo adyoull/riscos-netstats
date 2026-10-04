@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.05-rc2 (04 Oct 2026)
+- Data usage: the "This session" label no longer runs into the Down
+  column; when the session started is shown on its own line.
+
 ## 1.05-rc1 (04 Oct 2026)
 - New **Data usage** window: this session, today, this month, the last
   14 days and 12 months (counted while NetStats runs; saved in
