@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.05 (04 Oct 2026)"
+app$="NetStats":version$="1.06-rc1 (05 Oct 2026)"
 quit%=FALSE:task%=0
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -83,6 +83,7 @@ ifn%=0:ifok%=FALSE:iferr$=""
 DIM hin(HN%), hout(HN%):hpos%=0:hcount%=0
 DIM L$(NWIN%-1,MAXL%), nlines%(NWIN%-1), tab%(NWIN%-1,8), wh%(NWIN%-1), wopen%(NWIN%-1)
 DIM lastn%(NWIN%-1), P$(NWIN%-1,MAXL%), pn%(NWIN%-1)
+DIM extw%(NWIN%-1), lastw%(NWIN%-1), colw%(8):FOR i%=0 TO NWIN%-1:extw%(i%)=1400:NEXT
 REM data usage: one entry per day, plus this session
 DIM udate$(MAXDAYS%), udin(MAXDAYS%), udout(MAXDAYS%):un%=0
 sessin=0:sessout=0:sessstart$="":usave%=0
@@ -1002,10 +1003,10 @@ ENDPROC
 REM keep the work area extent in step with the number of lines
 DEF PROCset_extent(j%)
 LOCAL h%
-IF j%=WMON% OR nlines%(j%)=lastn%(j%) THEN ENDPROC
-lastn%(j%)=nlines%(j%)
+IF j%=WMON% OR (nlines%(j%)=lastn%(j%) AND extw%(j%)=lastw%(j%)) THEN ENDPROC
+lastn%(j%)=nlines%(j%):lastw%(j%)=extw%(j%)
 h%=topm%+LH%*(nlines%(j%)+1):IF h%<700 THEN h%=700
-b%!0=0:b%!4=-h%:b%!8=1400:b%!12=0
+b%!0=0:b%!4=-h%:b%!8=extw%(j%):b%!12=0
 SYS "Wimp_SetExtent",wh%(j%),b%
 ENDPROC
 
@@ -1073,9 +1074,10 @@ IF s$<>"" THEN SYS "Wimp_TextOp",2,s$,-1,-1,x%,y%
 ENDPROC
 
 DEF FNtextw(s$)
-LOCAL w%
+LOCAL w%, fl%
 IF s$="" THEN =0
-SYS "Wimp_TextOp",1,s$,0 TO w%
+SYS "XWimp_TextOp",1,s$,0 TO w% ;fl%
+IF fl% AND 1 THEN =16*LEN(s$)
 =w%
 
 DEF PROCpaint_text(j%)
@@ -1225,11 +1227,9 @@ ENDPROC
 
 REM TaskWindow messages: Ego (child started), Output (text), Morio (finished)
 DEF PROCtw_message(rs%)
-LOCAL n%, i%, c%, snd%
-REM the PRM asks the parent to acknowledge each TaskWindow_Output
-REM (the Wimp writes our handle into +4 when we send, so keep the sender)
-snd%=b%!4
-IF rs%=18 AND b%!16=&808C1 THEN b%!12=b%!8:SYS "XWimp_SendMessage",19,b%,snd%:b%!4=snd%
+LOCAL n%, i%, c%
+REM TaskWindow sends these as plain User_Message (17): no acknowledgement
+REM is needed (see the TaskWindow module source, s/Taskman)
 CASE b%!16 OF
   WHEN &808C2
     IF b%!20=conntxt% THEN conntask%=b%!4
@@ -1239,7 +1239,7 @@ CASE b%!16 OF
     n%=b%!20:IF n%>232 THEN n%=232
     IF n%<=0 THEN ENDPROC
     FOR i%=0 TO n%-1
-      c%=b%?(24+i%)
+      c%=b%?(24+i%):IF c%=9 THEN c%=32
       IF c%=10 OR c%=13 THEN
         IF cpart$<>"" AND crn%<=MAXCR% THEN cr$(crn%)=cpart$:crn%+=1
         cpart$=""
@@ -1303,6 +1303,37 @@ FOR i%=0 TO crn%-1
   ENDIF
 NEXT
 L$(WCONN%,0)="~"+STR$ntcp%+" TCP ("+STR$est%+" established, "+STR$lis%+" listening), "+STR$nudp%+" UDP.  Click to refresh."
+REM size the columns to fit what is in them (queue columns right-aligned)
+PROCautotab(WCONN%,&30,48)
+ENDPROC
+
+REM Set a window's tab stops from the widest text in each column, measured
+REM in the desktop font, so the columns line up whatever the font and
+REM however long the addresses are. Lines starting ~ or ! are not tabular.
+REM Bit c of rmask% set = column c is right-aligned. Widens the extent too.
+DEF PROCautotab(j%, rmask%, gap%)
+LOCAL i%, c%, p%, q%, s$, f$, w%, x%
+FOR c%=0 TO 8:colw%(c%)=0:NEXT
+FOR i%=0 TO nlines%(j%)-1
+  s$=L$(j%,i%)
+  IF LEFT$(s$,1)="#" THEN s$=MID$(s$,2)
+  IF INSTR(s$,CHR$9)>0 AND LEFT$(s$,1)<>"~" AND LEFT$(s$,1)<>"!" THEN
+    c%=0:p%=1
+    REPEAT
+      q%=INSTR(s$,CHR$9,p%)
+      IF q%=0 THEN f$=MID$(s$,p%) ELSE f$=MID$(s$,p%,q%-p%)
+      w%=FNtextw(f$):IF w%>colw%(c%) THEN colw%(c%)=w%
+      c%+=1:p%=q%+1
+    UNTIL q%=0 OR c%>8
+  ENDIF
+NEXT
+x%=16
+FOR c%=0 TO 8
+  IF rmask% AND (1<<c%) THEN tab%(j%,c%)=-(x%+colw%(c%)) ELSE tab%(j%,c%)=x%
+  IF colw%(c%)>0 THEN x%+=colw%(c%)+gap%
+NEXT
+x%+=16:IF x%<1400 THEN x%=1400
+extw%(j%)=x%
 ENDPROC
 
 REM split on spaces; returns the number of words

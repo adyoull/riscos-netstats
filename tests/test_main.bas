@@ -113,6 +113,14 @@ crn%=0:x%=OPENIN("inetstat.txt"):WHILE NOT EOF#x%:cr$(crn%)=GET$#x%:crn%+=1:ENDW
 nlines%(WCONN%)=0:PROCparse_conn("inetstat -an")
 PROCdump(WCONN%)
 PROCeq(L$(WCONN%,0),"~4 TCP (2 established, 2 listening), 1 UDP.  Click to refresh.")
+REM columns sized from the widest entry (mock font: 16 per character)
+s$="":FOR i%=0 TO 5:s$+=STR$tab%(WCONN%,i%)+" ":NEXT:PROCeq(s$,"16 144 480 800 -1120 -1264 ")
+PROCeq(STR$extw%(WCONN%),"1400")
+REM a long IPv6 address widens its column and the window
+cr$(crn%)="tcp6 0 0 fe80::ba27:ebff:fe12:3456%en0.22 fe80::1c2d:3e4f:5a6b:7c8d%en0.50123 ESTABLISHED":crn%+=1
+nlines%(WCONN%)=0:PROCparse_conn("inetstat -an")
+s$="":FOR i%=0 TO 5:s$+=STR$tab%(WCONN%,i%)+" ":NEXT:PROCeq(s$,"16 144 704 1312 -1632 -1776 ")
+PROCeq(STR$extw%(WCONN%),"1840")
 PRINT "failures: ";nfail%
 END
 
@@ -146,6 +154,9 @@ CLOSE#x%
 =l%
 
 REM mock: system variables
+REM mock: desktop font width
+DEF FNtextw(s$)=16*LEN(s$)
+
 DEF FNvar(n$)
 IF n$="Inet$HostName" THEN ="pi4"
 IF n$="Inet$Resolvers" THEN ="192.168.1.1 1.1.1.1"

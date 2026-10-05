@@ -1,5 +1,5 @@
-NetStats 1.05 (04 Oct 2026)
-===========================
+NetStats 1.06-rc1 (05 Oct 2026)
+===============================
 
 Network statistics for RISC OS. NetStats shows how much your machine is
 sending and receiving, per network interface, with a live graph, plus the
@@ -49,8 +49,10 @@ Protocols
 
 Connections
   Open TCP and UDP sockets: local and remote address, state and queue
-  sizes. NetStats gets these by running the stack's "inetstat -an" command
-  (or "netstat -an" if that is what is on Run$Path) in a TaskWindow, so
+  sizes. The columns widen to fit the longest address (scroll sideways
+  if the window is narrower). NetStats gets these by running the
+  stack's "inetstat -an" command (or "netstat -an" if that is what is
+  on Run$Path) in a TaskWindow, so
   the desktop carries on while it runs and no command window appears. It
   is a snapshot: click in the window to take a new one, or tick
   "Auto-refresh connections" in the menu to update it every 10 seconds
