@@ -1,0 +1,10 @@
+Active Internet connections (including servers)
+Proto Recv-Q Send-Q  Local Address          Foreign Address        (state)
+ip         0      0  192.168.0.134.17201    192.168.0.31.139
+ip         0      0  *.32770                *.*
+ip         0      0  *.137                  *.*
+ip         0      0  *.32771                *.*
+ip         0      0  *.49171                *.*
+Active UNIX domain sockets
+Address  Type   Recv-Q Send-Q    Inode     Conn     Refs  Nextref Addr
+0x4849000c dgram      0      0 0x4859000c      0x0      0x0      0x0 /dev/bpf

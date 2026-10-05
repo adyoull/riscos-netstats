@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.06-rc2 (05 Oct 2026)
+- Connections on the Internet 5 stack: its `inetstat` labels every
+  socket "ip", so 1.05 and rc1 did not recognise the lines and showed
+  them as raw text, which did not line up. Any socket line is now
+  recognised (a line with a state counts as TCP; others are counted as
+  "other"), and the UNIX domain socket list that follows is left out.
+- Connections: wider gaps between the columns.
+
 ## 1.06-rc1 (05 Oct 2026)
 - Connections: the columns are sized to fit their contents, measured in
   the desktop font, so they line up with the headings and with each

@@ -114,13 +114,24 @@ nlines%(WCONN%)=0:PROCparse_conn("inetstat -an")
 PROCdump(WCONN%)
 PROCeq(L$(WCONN%,0),"~4 TCP (2 established, 2 listening), 1 UDP.  Click to refresh.")
 REM columns sized from the widest entry (mock font: 16 per character)
-s$="":FOR i%=0 TO 5:s$+=STR$tab%(WCONN%,i%)+" ":NEXT:PROCeq(s$,"16 144 480 800 -1120 -1264 ")
-PROCeq(STR$extw%(WCONN%),"1400")
+s$="":FOR i%=0 TO 5:s$+=STR$tab%(WCONN%,i%)+" ":NEXT:PROCeq(s$,"16 192 576 944 -1312 -1504 ")
+PROCeq(STR$extw%(WCONN%),"1616")
 REM a long IPv6 address widens its column and the window
-cr$(crn%)="tcp6 0 0 fe80::ba27:ebff:fe12:3456%en0.22 fe80::1c2d:3e4f:5a6b:7c8d%en0.50123 ESTABLISHED":crn%+=1
+cr$(2)="tcp6 0 0 fe80::ba27:ebff:fe12:3456%en0.22 fe80::1c2d:3e4f:5a6b:7c8d%en0.50123 ESTABLISHED"
 nlines%(WCONN%)=0:PROCparse_conn("inetstat -an")
-s$="":FOR i%=0 TO 5:s$+=STR$tab%(WCONN%,i%)+" ":NEXT:PROCeq(s$,"16 144 704 1312 -1632 -1776 ")
-PROCeq(STR$extw%(WCONN%),"1840")
+s$="":FOR i%=0 TO 5:s$+=STR$tab%(WCONN%,i%)+" ":NEXT:PROCeq(s$,"16 192 800 1456 -1824 -2016 ")
+PROCeq(STR$extw%(WCONN%),"2128")
+PRINT "== connections (Internet 5 inetstat)"
+crn%=0:x%=OPENIN("inetstat5.txt"):WHILE NOT EOF#x%:cr$(crn%)=GET$#x%:crn%+=1:ENDWHILE:CLOSE#x%
+nlines%(WCONN%)=0:PROCparse_conn("inetstat -an")
+PROCdump(WCONN%)
+PROCeq(STR$nlines%(WCONN%),"7")
+PROCeq(L$(WCONN%,0),"~0 TCP (0 established, 0 listening), 0 UDP, 5 other.  Click to refresh.")
+PROCeq(FNshowtabs(L$(WCONN%,2)),"ip | 192.168.0.134:17201 | 192.168.0.31:139 |  | 0 | 0")
+PRINT "== connections (unrecognised output)"
+crn%=2:cr$(0)="Something odd":cr$(1)="happened here"
+nlines%(WCONN%)=0:PROCparse_conn("inetstat -an")
+PROCeq(STR$nlines%(WCONN%)+L$(WCONN%,3),"4~happened here")
 PRINT "failures: ";nfail%
 END
 

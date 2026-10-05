@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc1 (05 Oct 2026)"
+app$="NetStats":version$="1.06-rc2 (05 Oct 2026)"
 quit%=FALSE:task%=0
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -83,7 +83,7 @@ ifn%=0:ifok%=FALSE:iferr$=""
 DIM hin(HN%), hout(HN%):hpos%=0:hcount%=0
 DIM L$(NWIN%-1,MAXL%), nlines%(NWIN%-1), tab%(NWIN%-1,8), wh%(NWIN%-1), wopen%(NWIN%-1)
 DIM lastn%(NWIN%-1), P$(NWIN%-1,MAXL%), pn%(NWIN%-1)
-DIM extw%(NWIN%-1), lastw%(NWIN%-1), colw%(8):FOR i%=0 TO NWIN%-1:extw%(i%)=1400:NEXT
+DIM extw%(NWIN%-1), lastw%(NWIN%-1), colw%(8), ocr%(39):FOR i%=0 TO NWIN%-1:extw%(i%)=1400:NEXT
 REM data usage: one entry per day, plus this session
 DIM udate$(MAXDAYS%), udin(MAXDAYS%), udout(MAXDAYS%):un%=0
 sessin=0:sessout=0:sessstart$="":usave%=0
@@ -1276,36 +1276,52 @@ IF fl% AND 1 THEN =FALSE
 =(t%=1 OR t%=3)
 
 DEF PROCparse_conn(cmd$)
-LOCAL l$, n%, est%, lis%, ntcp%, nudp%, other%, T$, st$, i%, p$
+LOCAL l$, n%, est%, lis%, ntcp%, nudp%, nip%, other%, T$, st$, i%, p$, unix%
 T$=CHR$9
 IF crn%=0 THEN PROCaddl(WCONN%,"!'"+cmd$+"' produced no output"):ENDPROC
 PROCaddl(WCONN%,"")
 PROCaddl(WCONN%,"#Proto"+T$+"Local address"+T$+"Remote address"+T$+"State"+T$+"Recv-Q"+T$+"Send-Q")
 FOR i%=0 TO crn%-1
   l$=cr$(i%)
+  REM the UNIX domain socket list (if any) is not shown
+  IF INSTR(l$,"Active UNIX")=1 THEN unix%=TRUE
+  IF INSTR(l$,"Active Internet")=1 THEN unix%=FALSE
   n%=FNsplit(l$,cw$())
-  IF n%>=5 THEN p$=FNlower(cw$(0)) ELSE p$=""
-  IF LEFT$(p$,3)="tcp" OR LEFT$(p$,3)="udp" THEN
+  p$="":IF n%>=5 AND NOT unix% THEN IF FNisnum(cw$(1)) AND FNisnum(cw$(2)) THEN p$=FNlower(cw$(0))
+  IF p$<>"" THEN
+    REM Internet 5's inetstat calls every socket "ip": a state means TCP
     st$="":IF n%>=6 THEN st$=cw$(5)
     PROCaddl(WCONN%,p$+T$+FNhostport(cw$(3))+T$+FNhostport(cw$(4))+T$+st$+T$+cw$(1)+T$+cw$(2))
-    IF LEFT$(p$,3)="tcp" THEN
-      ntcp%+=1
-      IF st$="ESTABLISHED" THEN est%+=1
-      IF st$="LISTEN" THEN lis%+=1
-    ELSE
-      nudp%+=1
-    ENDIF
+    CASE TRUE OF
+      WHEN LEFT$(p$,3)="tcp" OR (p$="ip" AND st$<>""):ntcp%+=1
+      WHEN LEFT$(p$,3)="udp":nudp%+=1
+      OTHERWISE:nip%+=1
+    ENDCASE
+    IF st$="ESTABLISHED" THEN est%+=1
+    IF st$="LISTEN" THEN lis%+=1
   ELSE
-    IF l$<>"" AND INSTR(l$,"Proto")=0 AND INSTR(l$,"Active ")<>1 THEN
-      other%+=1
-      IF other%<=40 AND ntcp%+nudp%=0 THEN PROCaddl(WCONN%,"~"+LEFT$(l$,200))
-    ENDIF
+    IF l$<>"" AND NOT unix% AND INSTR(l$,"Proto")=0 AND INSTR(l$,"Active ")<>1 THEN other%+=1:IF other%<=40 THEN ocr%(other%-1)=i%
   ENDIF
 NEXT
-L$(WCONN%,0)="~"+STR$ntcp%+" TCP ("+STR$est%+" established, "+STR$lis%+" listening), "+STR$nudp%+" UDP.  Click to refresh."
+REM nothing recognised: show what the command printed, so it can be reported
+IF ntcp%+nudp%+nip%=0 AND other%>0 THEN
+  IF other%>40 THEN other%=40
+  FOR i%=0 TO other%-1:PROCaddl(WCONN%,"~"+LEFT$(cr$(ocr%(i%)),200)):NEXT
+ENDIF
+l$="~"+STR$ntcp%+" TCP ("+STR$est%+" established, "+STR$lis%+" listening), "+STR$nudp%+" UDP"
+IF nip%>0 THEN l$+=", "+STR$nip%+" other"
+L$(WCONN%,0)=l$+".  Click to refresh."
 REM size the columns to fit what is in them (queue columns right-aligned)
-PROCautotab(WCONN%,&30,48)
+PROCautotab(WCONN%,&30,96)
 ENDPROC
+
+DEF FNisnum(s$)
+LOCAL i%, c%
+IF s$="" THEN =FALSE
+FOR i%=1 TO LEN(s$)
+  c%=ASC(MID$(s$,i%,1)):IF c%<48 OR c%>57 THEN =FALSE
+NEXT
+=TRUE
 
 REM Set a window's tab stops from the widest text in each column, measured
 REM in the desktop font, so the columns line up whatever the font and
