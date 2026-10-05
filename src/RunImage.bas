@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc2 (05 Oct 2026)"
+app$="NetStats":version$="1.06-rc3 (05 Oct 2026)"
 quit%=FALSE:task%=0
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -923,15 +923,22 @@ ENDPROC
 
 REM create (or re-create next to the old one) in the current style
 DEF PROCiconbar_make
-LOCAL old%, w%
+LOCAL old%
 old%=ibar%
-IF ibrates% THEN w%=ibw% ELSE w%=68
 IF old%<0 THEN b%!0=-1 ELSE b%!0=-4
-b%!4=0:b%!8=-16:b%!12=w%:b%!16=84
-REM text + sprite, indirected, centred, click button type, fg 7 bg 1
-b%!20=&1700310B
-b%!24=ibtext%:b%!28=ibval%:b%!32=40
-IF NOT ibrates% THEN $ibtext%="":ibtext$=""
+IF ibrates% THEN
+  REM text + sprite, indirected, centred, click button type, fg 7 bg 1;
+  REM the icon reaches below the bar's baseline to make room for the text
+  b%!4=0:b%!8=-16:b%!12=ibw%:b%!16=84
+  b%!20=&1700310B
+  b%!24=ibtext%:b%!28=ibval%:b%!32=40
+ELSE
+  REM sprite only, the standard 68x68 icon bar icon (no space under it)
+  b%!4=0:b%!8=0:b%!12=68:b%!16=68
+  b%!20=&1700301A
+  $(b%+24)="!netstats"
+  $ibtext%="":ibtext$=""
+ENDIF
 SYS "Wimp_CreateIcon",old%,b% TO ibar%
 IF old%>=0 THEN
   !isb%=-2:isb%!4=old%

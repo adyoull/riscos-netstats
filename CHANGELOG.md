@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.06-rc3 (05 Oct 2026)
+- With "Rates on icon bar" off, the icon bar icon is a plain 68x68
+  sprite icon, so it sits level with the other icons instead of
+  leaving a gap underneath for the text.
+
 ## 1.06-rc2 (05 Oct 2026)
 - Connections on the Internet 5 stack: its `inetstat` labels every
   socket "ip", so 1.05 and rc1 did not recognise the lines and showed
