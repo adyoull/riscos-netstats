@@ -1,4 +1,4 @@
-NetStats 1.06-rc11 (12 Oct 2026)
+NetStats 1.06-rc12 (12 Oct 2026)
 ================================
 
 Network statistics for RISC OS. NetStats shows how much your machine is
@@ -81,7 +81,8 @@ Devices
   Bonjour: if both give the same name it is shown once; if they differ
   both are shown, NetBIOS first ("RASPBERRY/RasPi"). Opening the window the first time scans
   the network; click in the window to scan again. A scan takes a few
-  seconds.
+  seconds; when it finishes the window widens (or narrows) to fit the
+  list.
   How it works: NetStats sends a small NetBIOS "node status" query (UDP
   port 137) to every address on each local IPv4 network (up to 1024
   addresses, 256 on the Internet 5 stack; on a bigger network, the 256

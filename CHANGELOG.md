@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.06-rc12 (12 Oct 2026)
+- Devices: when a scan finishes the window is resized to the width of
+  the list (as far as the screen allows), so every column is visible.
+
 ## 1.06-rc11 (12 Oct 2026)
 - Devices: the NetBIOS and Bonjour names share one Name column. When
   both give the same name (ignoring case) it is shown once, as Bonjour

@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc11 (12 Oct 2026)"
+app$="NetStats":version$="1.06-rc12 (12 Oct 2026)"
 quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -1052,6 +1052,24 @@ SYS "Wimp_CloseWindow",,b%
 wopen%(j%)=FALSE
 ENDPROC
 
+REM make an open window as wide as its contents (extw%), within the
+REM screen: moved left if it would go off the right-hand edge
+DEF PROCfit_width(j%)
+LOCAL w%, sw%, xe%, xl%
+IF NOT wopen%(j%) THEN ENDPROC
+SYS "OS_ReadModeVariable",-1,4 TO ,,xe%
+SYS "OS_ReadModeVariable",-1,11 TO ,,xl%
+sw%=(xl%+1)<<xe%
+!b%=wh%(j%)
+SYS "Wimp_GetWindowState",,b%
+w%=extw%(j%):IF w%>sw%-48 THEN w%=sw%-48
+b%!12=b%!4+w%
+IF b%!12>sw%-40 THEN b%!12=sw%-40:b%!4=b%!12-w%
+IF b%!4<0 THEN b%!4=0
+b%!20=0
+SYS "Wimp_OpenWindow",,b%
+ENDPROC
+
 REM keep the work area extent in step with the number of lines
 DEF PROCset_extent(j%)
 LOCAL h%
@@ -2036,7 +2054,7 @@ FOR j%=0 TO nsr%-1
   ENDIF
 NEXT
 scantime$=MID$(TIME$,17,8)
-IF wopen%(WDEV%) THEN PROCbuild_one(WDEV%):PROCrefresh_full(WDEV%)
+IF wopen%(WDEV%) THEN PROCbuild_one(WDEV%):PROCrefresh_full(WDEV%):PROCfit_width(WDEV%)
 ENDPROC
 
 DEF PROCscan_close
