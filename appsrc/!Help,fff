@@ -1,4 +1,4 @@
-NetStats 1.06-rc8 (12 Oct 2026)
+NetStats 1.06-rc9 (12 Oct 2026)
 ===============================
 
 Network statistics for RISC OS. NetStats shows how much your machine is
@@ -122,7 +122,8 @@ Menu
   Include loopback          count lo0 in the Monitor totals
   Rates on icon bar         show the current download (v) and upload (^)
                             rates under the icon bar icon, e.g.
-                            "v1.2M ^34K" (on by default)
+                            "v1.20M ^34.0K"; always three figures, so
+                            the label keeps its width (on by default)
   Auto-refresh connections  see Connections above
   Reset session totals      start the "This session" figures again
   Quit

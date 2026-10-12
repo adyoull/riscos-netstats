@@ -26,8 +26,8 @@ PROCeq(STR$FNver_from_help("Internet	5.68 (07 Aug 2024)"),"568")
 n%=FNsplit("tcp   0  52  a.1   b.2   ESTABLISHED",cw$())
 PROCeq(STR$n%+cw$(0)+cw$(2)+cw$(5),"6tcp52ESTABLISHED")
 
-bits%=FALSE:PROCeq(FNshort(500)+FNshort(1536)+FNshort(3*1048576),"500B1.5K3.0M")
-bits%=TRUE:PROCeq(FNshort(125000),"1.0Mb"):bits%=FALSE
+bits%=FALSE:PROCeq(FNshort(0)+" "+FNshort(500)+" "+FNshort(1536)+" "+FNshort(12.3*1024)+" "+FNshort(123*1024)+" "+FNshort(1023*1024)+" "+FNshort(3*1048576),"0.00K 0.49K 1.50K 12.3K 123K 1.00M 3.00M")
+bits%=TRUE:PROCeq(FNshort(125000)+" "+FNshort(0),"1.00M 0.00k"):bits%=FALSE
 PRINT "== ROD stack"
 stack%=2:fx$="fx/rod_iflist":tcpfx$="fx/rod_tcp536"
 PROCread_ifaces(1):PROCread_stats(1)

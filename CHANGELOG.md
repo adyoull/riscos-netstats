@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.06-rc9 (12 Oct 2026)
+- Icon bar rates: always three figures with a unit (0.00K, 2.60K,
+  12.3K, 123K, 1.05M), so the label keeps nearly the same width and no
+  longer jumps about as the rates change. "B" (bytes) is no longer
+  used: small rates show as 0.xxK.
+
 ## 1.06-rc8 (12 Oct 2026)
 - Network and Devices on the ROD stack: the routing table was read but
   every entry was skipped. The rc7 Scan details bytes showed why: ROD

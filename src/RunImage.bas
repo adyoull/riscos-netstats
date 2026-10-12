@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc8 (12 Oct 2026)"
+app$="NetStats":version$="1.06-rc9 (12 Oct 2026)"
 quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -955,7 +955,7 @@ REM ("v" = down, "^" = up) when "Rates on icon bar" is ticked
 DEF PROCiconbar
 DIM ibtext% 40, ibval% 16, isb% 40
 $ibval%="S!netstats":$ibtext%="":ibtext$=""
-ibw%=FNtextw("v8888Kb ^8888Kb")+16:IF ibw%<68 THEN ibw%=68
+ibw%=FNtextw("v88.8K ^88.8K")+24:IF ibw%<68 THEN ibw%=68
 ibar%=-1
 PROCiconbar_make
 ENDPROC
@@ -986,19 +986,22 @@ ENDIF
 ENDPROC
 
 REM short rate for the icon bar: 1023 B/s -> "1023B", 1.5 MB/s -> "1.5M"
+REM short rate for the icon bar, always three figures so the label keeps
+REM (nearly) the same width and doesn't shift about every second:
+REM 0.00K, 2.60K, 12.3K, 123K, 1.05M ... (bits/s: 0.00k ... with powers of 1000)
 DEF FNshort(r)
+LOCAL v, b, u%, u$
 IF r<0 THEN r=0
-IF bits% THEN
-  r=r*8
-  IF r<1000 THEN =STR$(INT(r+0.5))+"b"
-  IF r<1E6 THEN =FNdp(r/1000)+"kb"
-  IF r<1E9 THEN =FNdp(r/1E6)+"Mb"
-  =FNdp(r/1E9)+"Gb"
-ENDIF
-IF r<1024 THEN =STR$(INT(r+0.5))+"B"
-IF r<1048576 THEN =FNdp(r/1024)+"K"
-IF r<1073741824 THEN =FNdp(r/1048576)+"M"
-=FNdp(r/1073741824)+"G"
+IF bits% THEN v=r*8/1000:b=1000:u$="kMG" ELSE v=r/1024:b=1024:u$="KMG"
+WHILE v>=999.5 AND u%<2:v=v/b:u%+=1:ENDWHILE
+=FNsig3(v)+MID$(u$,u%+1,1)
+
+REM a number 0-999 as three significant figures: 0.05, 2.60, 12.3, 123
+DEF FNsig3(v)
+LOCAL n%, s$
+IF v<9.995 THEN n%=INT(v*100+0.5):s$=RIGHT$("00"+STR$n%,3):=LEFT$(s$,1)+"."+MID$(s$,2)
+IF v<99.95 THEN n%=INT(v*10+0.5):s$=STR$n%:=LEFT$(s$,2)+"."+MID$(s$,3)
+=STR$(INT(v+0.5))
 
 DEF PROCiconbar_text
 LOCAL t$
