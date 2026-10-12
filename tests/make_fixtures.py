@@ -203,6 +203,28 @@ open(os.path.join(out, 'nbstat_win'), 'wb').write(nbstat(
     bytes([0x00, 0x15, 0x5D, 0x01, 0x02, 0x03])))
 open(os.path.join(out, 'nbstat_samba'), 'wb').write(nbstat(
     [('NAS', 0x20, False), ('NAS', 0, False), ('HOME', 0, True)], bytes(6), compress=True))
+# ---------------------------------------------------------------- mDNS (RFC 6762)
+def dname(n):
+    return b''.join(bytes([len(l)]) + l.encode() for l in n.split('.')) + b'\0'
+mq = struct.pack('>HHHHHH', 0x4D35, 0, 1, 0, 0, 0) + dname('134.0.168.192.in-addr.arpa') + struct.pack('>HH', 12, 0x8001)
+open(os.path.join(out, 'mdquery'), 'wb').write(mq)
+# reply: question echoed, answer name = pointer to the question, PTR rdata
+# "Mac-Studio" + pointer to a later "local" label in an additional record
+q = dname('58.0.168.192.in-addr.arpa')
+hdr = struct.pack('>HHHHHH', 0x4D35, 0x8400, 1, 1, 0, 0)
+body = hdr + q + struct.pack('>HH', 12, 1)
+local_at = None
+rd = bytes([10]) + b'Mac-Studio' + b'\xc0\x00'          # pointer patched below
+ans = b'\xc0\x0c' + struct.pack('>HHIH', 12, 1, 10, len(rd)) + rd
+extra = dname('local')
+msg = bytearray(body + ans)
+local_at = len(msg)
+msg += extra
+# patch the pointer inside rdata to point at the "local" name
+pos = len(body) + 2 + 10 + 11
+msg[pos] = 0xC0 | (local_at >> 8); msg[pos + 1] = local_at & 0xFF
+open(os.path.join(out, 'mdreply'), 'wb').write(bytes(msg))
+
 # a small manufacturer table in the OUI file format
 open(os.path.join(out, 'oui.tsv'), 'w').write('000393\tApple\n00155D\tMicrosoft\nB827EB\tRaspberry Pi\n')
 import subprocess

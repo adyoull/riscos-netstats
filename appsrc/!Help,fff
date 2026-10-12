@@ -1,4 +1,4 @@
-NetStats 1.06-rc6 (12 Oct 2026)
+NetStats 1.06-rc7 (12 Oct 2026)
 ===============================
 
 Network statistics for RISC OS. NetStats shows how much your machine is
@@ -76,8 +76,8 @@ Network
 
 Devices
   The other machines on your local network: IP address, MAC (hardware)
-  address, name and workgroup, the maker of the network adapter, and the
-  interface they were found on. Opening the window the first time scans
+  address, NetBIOS name and workgroup, Bonjour name, the maker of the
+  network adapter, and the interface they were found on. Opening the window the first time scans
   the network; click in the window to scan again. A scan takes a few
   seconds.
   How it works: NetStats sends a small NetBIOS "node status" query (UDP
@@ -88,7 +88,10 @@ Devices
   that is switched on.
   Machines that answered ARP but not the first query are asked again.
   Windows PCs, Samba (Linux, most NAS boxes) and LanMan reply with their
-  name and workgroup. Other devices show their addresses only. If the
+  name and workgroup. NetStats also asks each address for its Bonjour
+  name (an mDNS query sent to the machine's port 5353): Macs, iPhones
+  and iPads, most network printers and Linux machines running Avahi
+  answer. Other devices show their addresses only. If the
   window was open when NetStats last quit, it comes back without
   scanning: click in it to scan.
   Notes:

@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc6 (12 Oct 2026)"
+app$="NetStats":version$="1.06-rc7 (12 Oct 2026)"
 quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -102,13 +102,13 @@ DIM wpos%(NWIN%-1,3), wposok%(NWIN%-1), wwasopen%(NWIN%-1)
 connstamp%=0:connbusy%=FALSE:conntask%=0:conntxt%=&4E537478:crn%=0:cpart$=""
 MAXCR%=600:DIM cr$(MAXCR%)
 REM devices found by a network scan
-DIM dip%(MAXDEV%), dmac$(MAXDEV%), dname$(MAXDEV%), dgrp$(MAXDEV%), dvend$(MAXDEV%), dif$(MAXDEV%)
+DIM dip%(MAXDEV%), dmd$(MAXDEV%), dmac$(MAXDEV%), dname$(MAXDEV%), dgrp$(MAXDEV%), dvend$(MAXDEV%), dif$(MAXDEV%)
 DIM dself%(MAXDEV%), dnb%(MAXDEV%), dord%(MAXDEV%):dn%=0
 DIM sbase%(MAXIF%), scount%(MAXIF%), sown%(MAXIF%), sif%(MAXIF%), sdesc$(MAXIF%):nsr%=0
-DIM nbq% 64, nbr% 600, nsa% 32, nsl% 8, ouib% 64
+DIM nbq% 64, mdq% 80, nbr% 600, nsa% 32, nsl% 8, ouib% 64
 scanning%=FALSE:scanned%=FALSE:scansock%=-1:scanmsg$="":scantime$="":nbid%=0
 scantotal%=0:scansent%=0:scanr%=0:scanh%=0:scanend%=0:scanphase%=0:scanretry%=0
-scanok%=0:scanerr%=0:scanerr$="":scanpkt%=0:scanrep%=0:arpll%=0:arpmac%=0:arprt%=0:arpbytes%=0:sin43%=FALSE:nbidhi%=0:nbidlo%=0
+scanok%=0:scanerr%=0:scanerr$="":scanpkt%=0:scanrep%=0:arpll%=0:arpmac%=0:arprt%=0:arpbytes%=0:sin43%=FALSE:nbidhi%=0:nbidlo%=0:scanmdr%=0:mdid%=0:mdidhi%=0:mdidlo%=0:arphex$=""
 ouih%=0:ouin%=0:ouirs%=24:ouifile$="<NetStats$Dir>.OUI"
 ENDPROC
 
@@ -1805,9 +1805,10 @@ REM non-blocking, or a read with nothing waiting would hang the desktop
 SYS XSocketIoctl%,scansock%,&8004667E,tmp% TO ;f%
 IF f% AND 1 THEN PROCscan_close:scanmsg$="Could not set up the UDP socket.":ENDPROC
 nbid%=(nbid%+1) AND &FFFF:nbidhi%=nbid%>>8:nbidlo%=nbid% AND 255
+mdid%=(nbid%+&4D00) AND &FFFF:mdidhi%=mdid%>>8:mdidlo%=mdid% AND 255
 PROCnb_query(nbq%,nbid%)
 scanr%=0:scanh%=0:scansent%=0:scanphase%=1:scanning%=TRUE
-scanok%=0:scanerr%=0:scanerr$="":scanpkt%=0:scanrep%=0:arpll%=0:arpmac%=0:arprt%=0
+scanok%=0:scanerr%=0:scanerr$="":scanpkt%=0:scanrep%=0:scanmdr%=0:arpll%=0:arpmac%=0:arprt%=0
 SYS "OS_ReadMonotonicTime" TO scanend%
 ENDPROC
 
@@ -1847,7 +1848,7 @@ SYS "OS_ReadMonotonicTime" TO now%
 k%=0
 WHILE k%<16 AND scanr%<nsr%
   ip%=sbase%(scanr%)+1+scanh%
-  IF ip%<>sown%(scanr%) THEN PROCnb_send(ip%):k%+=1
+  IF ip%<>sown%(scanr%) THEN PROCnb_send(ip%):PROCmd_send(ip%):k%+=1
   scansent%+=1:scanh%+=1
   IF scanh%>=scount%(scanr%) THEN scanr%+=1:scanh%=0
   scanend%=now%
@@ -1867,7 +1868,10 @@ PROCread_arp
 scanretry%=0
 IF dn%>0 THEN
   FOR i%=0 TO dn%-1
-    IF dmac$(i%)<>"" AND NOT dnb%(i%) THEN PROCnb_send(dip%(i%)):scanretry%+=1
+    IF NOT dself%(i%) THEN
+      IF dmac$(i%)<>"" AND NOT dnb%(i%) THEN PROCnb_send(dip%(i%)):scanretry%+=1
+      IF dmd$(i%)="" THEN PROCmd_send(dip%(i%))
+    ENDIF
   NEXT
 ENDIF
 scanphase%=2
@@ -1878,17 +1882,109 @@ REM send the query to one address. If the stack refuses the 4.4BSD form
 REM of the address, try the 4.3BSD form (16-bit family, no length) once and
 REM keep using whichever works. Counts are shown under the Devices list.
 DEF PROCnb_send(ip%)
+PROCudp_send(ip%,137,nbq%,50)
+ENDPROC
+
+REM Bonjour: ask the machine itself (unicast to its mDNS port 5353) for the
+REM name behind its address, a PTR query for d.c.b.a.in-addr.arpa
+DEF PROCmd_send(ip%)
+PROCudp_send(ip%,5353,mdq%,FNmd_query(mdq%,ip%,mdid%))
+ENDPROC
+
+DEF PROCudp_send(ip%, port%, pkt%, len%)
 LOCAL f%, e%
-PROCsin(nsa%,ip%,137)
+PROCsin(nsa%,ip%,port%)
 IF sin43% THEN nsa%?0=AF_INET%:nsa%?1=0
-SYS XSocketSendto%,scansock%,nbq%,50,0,nsa%,16 TO e% ;f%
+SYS XSocketSendto%,scansock%,pkt%,len%,0,nsa%,16 TO e% ;f%
 IF (f% AND 1) AND NOT sin43% AND scanok%=0 THEN
   nsa%?0=AF_INET%:nsa%?1=0
-  SYS XSocketSendto%,scansock%,nbq%,50,0,nsa%,16 TO e% ;f%
+  SYS XSocketSendto%,scansock%,pkt%,len%,0,nsa%,16 TO e% ;f%
   IF (f% AND 1)=0 THEN sin43%=TRUE
 ENDIF
 IF f% AND 1 THEN scanerr%+=1:scanerr$=FNerrstr(e%) ELSE scanok%+=1
 ENDPROC
+
+REM mDNS (RFC 6762) query: header, the reverse name, type PTR (12), class
+REM IN with the "unicast reply" bit (&8001). Returns the length.
+DEF FNmd_query(q%, ip%, id%)
+LOCAL i%, p%, l$
+q%?0=id%>>8:q%?1=id% AND 255
+FOR i%=2 TO 11:q%?i%=0:NEXT
+q%?5=1:p%=q%+12
+FOR i%=0 TO 3
+  l$=STR$((ip%>>>(8*i%)) AND 255):?p%=LEN(l$):$(p%+1)=l$:p%+=LEN(l$)+1
+NEXT
+?p%=7:$(p%+1)="in-addr":p%+=8
+?p%=4:$(p%+1)="arpa":p%+=5
+p%?0=0:p%?1=0:p%?2=12:p%?3=&80:p%?4=1
+=p%+5-q%
+
+REM a reply to our mDNS query: from port 5353 with our ID (some
+REM responders send ID 0)
+DEF FNmd_ours(sa%, r%)
+IF sa%?2<>&14 OR sa%?3<>&E9 THEN =FALSE
+IF r%?0=mdidhi% AND r%?1=mdidlo% THEN =TRUE
+=(r%?0=0 AND r%?1=0)
+
+REM mDNS answer: the first PTR record's name, without ".local"
+DEF PROCmd_reply(r%, n%, ip%)
+LOCAL p%, qd%, an%, i%, ty%, rl%, nm$, d%
+IF n%<12 OR (r%?2 AND &80)=0 THEN ENDPROC
+qd%=r%?4*256+r%?5:an%=r%?6*256+r%?7
+IF an%=0 THEN ENDPROC
+p%=r%+12
+WHILE qd%>0 AND p%<r%+n%:p%=FNdns_skip(r%,n%,p%)+4:qd%-=1:ENDWHILE
+i%=0
+WHILE i%<an% AND p%+10<=r%+n% AND nm$=""
+  p%=FNdns_skip(r%,n%,p%)
+  IF p%+10<=r%+n% THEN
+    ty%=p%?0*256+p%?1:rl%=p%?8*256+p%?9
+    IF ty%=12 THEN nm$=FNdns_name(r%,n%,p%+10)
+    p%+=10+rl%
+  ENDIF
+  i%+=1
+ENDWHILE
+IF RIGHT$(nm$,6)=".local" THEN nm$=LEFT$(nm$,LEN(nm$)-6)
+IF nm$="" THEN ENDPROC
+d%=FNdev(ip%):IF d%<0 THEN ENDPROC
+IF dmd$(d%)="" THEN dmd$(d%)=nm$:scanmdr%+=1
+ENDPROC
+
+REM step over a (possibly compressed) DNS name
+DEF FNdns_skip(r%, n%, p%)
+LOCAL c%
+WHILE p%<r%+n%
+  c%=?p%
+  IF c%=0 THEN =p%+1
+  IF (c% AND &C0)=&C0 THEN =p%+2
+  p%+=c%+1
+ENDWHILE
+=r%+n%
+
+REM read a DNS name, following compression pointers
+DEF FNdns_name(r%, n%, p%)
+LOCAL s$, c%, j%, k%, ch%
+WHILE p%<r%+n% AND j%<12 AND LEN(s$)<180
+  c%=?p%
+  IF c%=0 THEN p%=r%+n%
+  REM &40 and &80 label types are not used: stop
+  IF (c% AND &C0)=&40 OR (c% AND &C0)=&80 THEN p%=r%+n%:c%=0
+  IF c%<>0 AND (c% AND &C0)=&C0 THEN
+    IF p%+1<r%+n% THEN p%=r%+(c% AND &3F)*256+p%?1:j%+=1 ELSE p%=r%+n%
+  ENDIF
+  IF c%<>0 AND (c% AND &C0)=0 THEN
+    IF p%+c%<r%+n% THEN
+      FOR k%=1 TO c%
+        ch%=p%?k%:IF ch%<32 OR ch%>126 THEN ch%=ASC"?"
+        s$+=CHR$ch%
+      NEXT
+      s$+="."
+    ENDIF
+    p%+=c%+1
+  ENDIF
+ENDWHILE
+IF RIGHT$(s$,1)="." THEN s$=LEFT$(s$,LEN(s$)-1)
+=s$
 
 DEF PROCscan_receive
 LOCAL n%, f%, k%
@@ -1898,6 +1994,7 @@ REPEAT
   IF (f% AND 1)=0 AND n%>0 THEN
     scanpkt%+=1
     IF FNnb_ours(nsa%,nbr%) THEN PROCnb_reply(nbr%,n%,FNipn(nsa%+4))
+    IF FNmd_ours(nsa%,nbr%) THEN PROCmd_reply(nbr%,n%,FNipn(nsa%+4))
   ENDIF
   k%+=1
 UNTIL (f% AND 1) OR n%<=0 OR k%>=32
@@ -1998,7 +2095,7 @@ IF stack%=0 THEN ENDPROC
 PROCmib(CTL_NET%,PF_ROUTE%,0,0,NET_RT_DUMP%,0)
 n%=FNsysctl(mib%,6,rtbuf%,FNrtsize(6))
 IF n%<0 THEN scanmsg$="ARP table not available: "+sysctl_err$:ENDPROC
-arpll%=0:arpmac%=0:arprt%=0:arpbytes%=n%
+arpll%=0:arpmac%=0:arprt%=0:arpbytes%=n%:arphex$=FNhexbytes(rtbuf%,n%,12)
 PROCparse_arp(rtbuf%,n%)
 REM nothing found: ask for just the ARP entries (net.route.0.inet.flags.LLINFO)
 IF arpll%=0 THEN
@@ -2007,6 +2104,15 @@ IF arpll%=0 THEN
   IF n%>0 THEN PROCparse_arp(rtbuf%,n%)
 ENDIF
 ENDPROC
+
+REM the first bytes of a buffer in hex, for the Scan details line
+DEF FNhexbytes(p%, n%, m%)
+LOCAL i%, s$
+IF m%>n% THEN m%=n%
+IF m%>0 THEN
+  FOR i%=0 TO m%-1:s$+=RIGHT$("0"+STR$~(p%?i%),2)+" ":NEXT
+ENDIF
+=s$
 
 DEF PROCparse_arp(buf%, n%)
 LOCAL p%, ml%, hdr%, idx%, addrs%, fl%, sa%, bit%, l%, dst%, gw%, skip%, d%, i%, j%, mac$
@@ -2059,7 +2165,7 @@ IF dn%>0 THEN
   NEXT
 ENDIF
 IF dn%>MAXDEV% THEN =-1
-dip%(dn%)=ip%:dmac$(dn%)="":dname$(dn%)="":dgrp$(dn%)="":dvend$(dn%)=""
+dip%(dn%)=ip%:dmd$(dn%)="":dmac$(dn%)="":dname$(dn%)="":dgrp$(dn%)="":dvend$(dn%)=""
 dif$(dn%)="":dself%(dn%)=FALSE:dnb%(dn%)=FALSE
 dn%+=1
 =dn%-1
@@ -2154,7 +2260,7 @@ ELSE
   ENDIF
 ENDIF
 PROCaddl(WDEV%,"")
-PROCaddl(WDEV%,"#IP address"+T$+"MAC address"+T$+"Name"+T$+"Workgroup"+T$+"Maker"+T$+"Interface")
+PROCaddl(WDEV%,"#IP address"+T$+"MAC address"+T$+"NetBIOS name"+T$+"Workgroup"+T$+"Bonjour name"+T$+"Maker"+T$+"Interface")
 REM in address order
 IF dn%>0 THEN
   FOR i%=0 TO dn%-1:dord%(i%)=i%:NEXT
@@ -2171,19 +2277,20 @@ IF dn%>0 THEN
   ENDIF
   FOR k%=0 TO dn%-1
     i%=dord%(k%):s$=dname$(i%):IF dself%(i%) THEN s$+=" (this machine)"
-    PROCaddl(WDEV%,FNipstr(dip%(i%))+T$+dmac$(i%)+T$+s$+T$+dgrp$(i%)+T$+dvend$(i%)+T$+dif$(i%))
+    PROCaddl(WDEV%,FNipstr(dip%(i%))+T$+dmac$(i%)+T$+s$+T$+dgrp$(i%)+T$+dmd$(i%)+T$+dvend$(i%)+T$+dif$(i%))
   NEXT
 ENDIF
 IF NOT scanning% AND scanned% THEN
   PROCaddl(WDEV%,"")
-  PROCaddl(WDEV%,"~Names come from NetBIOS (Windows, Samba, LanMan); other devices show their address only.")
+  PROCaddl(WDEV%,"~Names come from NetBIOS (Windows, Samba, LanMan) and Bonjour (Macs, iPhones, printers,")
+  PROCaddl(WDEV%,"~Linux with Avahi). Devices that answer neither show their address only.")
   PROCaddl(WDEV%,"~Devices on other networks (beyond a router) cannot be seen.")
   s$="~Scan details: "+STR$scanok%+" queries sent"
   IF scanerr% THEN s$+=" ("+STR$scanerr%+" refused: "+LEFT$(scanerr$,60)+")"
   IF sin43% THEN s$+=" (old address form)"
-  s$+=", "+STR$scanpkt%+" packets back, "+STR$scanrep%+" NetBIOS replies, "
+  s$+=", "+STR$scanpkt%+" packets back, "+STR$scanrep%+" NetBIOS and "+STR$scanmdr%+" Bonjour replies, "
   PROCaddl(WDEV%,s$+STR$arpmac%+" ARP entries with MAC")
-  PROCaddl(WDEV%,"~("+STR$arpll%+" ARP, "+STR$arprt%+" routes in "+STR$arpbytes%+" bytes read from the stack).")
+  PROCaddl(WDEV%,"~("+STR$arpll%+" ARP, "+STR$arprt%+" routes in "+STR$arpbytes%+" bytes read from the stack; first bytes "+arphex$+")")
 ENDIF
 PROCautotab(WDEV%,0,64)
 ENDPROC

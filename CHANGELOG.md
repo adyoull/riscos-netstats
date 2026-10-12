@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.06-rc7 (12 Oct 2026)
+- Devices: Bonjour names. Each address is also sent an mDNS query
+  (RFC 6762, unicast to port 5353) for the name behind its address;
+  Macs, iOS devices, printers and Avahi answer. New "Bonjour name"
+  column; the "Name" column is now "NetBIOS name".
+- rc6 confirmed NetBIOS names on ROD (4 of 4 machines). The routing
+  table still gives no ARP entries on ROD (54560 bytes, 0 routes), so
+  the Scan details line now shows the first bytes the stack returned.
+
 ## 1.06-rc6 (12 Oct 2026)
 - Devices: NetBIOS replies were thrown away. The check on the reply's
   ID had a shift ("ID>>8") inside a comparison, and BBC BASIC gives
