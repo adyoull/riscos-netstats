@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.06-rc10 (12 Oct 2026)
+- The list windows (Interfaces, Protocols, Connections, Data usage,
+  Network, Devices) have a horizontal scroll bar, so wide columns such
+  as the Devices window's Maker and Interface can be scrolled to.
+
 ## 1.06-rc9 (12 Oct 2026)
 - Icon bar rates: always three figures with a unit (0.00K, 2.60K,
   12.3K, 123K, 1.05M), so the label keeps nearly the same width and no

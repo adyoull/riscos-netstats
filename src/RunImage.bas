@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc9 (12 Oct 2026)"
+app$="NetStats":version$="1.06-rc10 (12 Oct 2026)"
 quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -877,12 +877,14 @@ DEF PROCcreate_windows
 LOCAL i%
 nwin%=0
 wh%(WMON%)=FNwindow("NetStats",600,300,1600,1200,&A7000002,200,160)
-wh%(WIF%)=FNwindow("Interfaces",1060,640,1400,4000,&BF000002,0,0)
-wh%(WPROT%)=FNwindow("Protocol statistics",820,640,1000,4000,&BF000002,0,0)
-wh%(WCONN%)=FNwindow("Connections",1300,560,1400,8000,&BF000002,0,0)
-wh%(WUSE%)=FNwindow("Data usage",900,600,1000,4000,&BF000002,0,0)
-wh%(WNET%)=FNwindow("Network",1160,560,1400,8000,&BF000002,0,0)
-wh%(WDEV%)=FNwindow("Devices",1300,600,1400,8000,&BF000002,0,0)
+REM list windows: title, back, close, toggle, vertical and horizontal
+REM scroll bars (bit 30), resize (&FF000002)
+wh%(WIF%)=FNwindow("Interfaces",1060,640,1400,4000,&FF000002,0,0)
+wh%(WPROT%)=FNwindow("Protocol statistics",820,640,1000,4000,&FF000002,0,0)
+wh%(WCONN%)=FNwindow("Connections",1300,560,1400,8000,&FF000002,0,0)
+wh%(WUSE%)=FNwindow("Data usage",900,600,1000,4000,&FF000002,0,0)
+wh%(WNET%)=FNwindow("Network",1160,560,1400,8000,&FF000002,0,0)
+wh%(WDEV%)=FNwindow("Devices",1300,600,1400,8000,&FF000002,0,0)
 REM tab stops (negative = right aligned at that x)
 tab%(WIF%,0)=16:tab%(WIF%,1)=150:tab%(WIF%,2)=-380:tab%(WIF%,3)=-560:tab%(WIF%,4)=-770:tab%(WIF%,5)=-900:tab%(WIF%,6)=-1030
 tab%(WPROT%,0)=16:tab%(WPROT%,1)=-600:tab%(WPROT%,2)=-790
