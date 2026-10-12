@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc12 (12 Oct 2026)"
+app$="NetStats":version$="1.06-rc13 (12 Oct 2026)"
 quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -87,6 +87,9 @@ ifn%=0:ifok%=FALSE:iferr$=""
 DIM hin(HN%), hout(HN%):hpos%=0:hcount%=0
 DIM L$(NWIN%-1,MAXL%), nlines%(NWIN%-1), tab%(NWIN%-1,8), wh%(NWIN%-1), wopen%(NWIN%-1)
 DIM lastn%(NWIN%-1), P$(NWIN%-1,MAXL%), pn%(NWIN%-1)
+DIM zeb%(NWIN%-1,MAXL%), zc%(NWIN%-1), zon%(NWIN%-1)
+REM zebra stripes in the tables of these windows
+zon%(WCONN%)=TRUE:zon%(WNET%)=TRUE:zon%(WDEV%)=TRUE
 DIM extw%(NWIN%-1), lastw%(NWIN%-1), colw%(8), ocr%(39):FOR i%=0 TO NWIN%-1:extw%(i%)=1400:NEXT
 REM data usage: one entry per day, plus this session
 DIM udate$(MAXDAYS%), udin(MAXDAYS%), udout(MAXDAYS%):un%=0
@@ -808,8 +811,17 @@ CASE j% OF
 ENDCASE
 ENDPROC
 
+REM add a line to a window. In tables (zon%) every other row after a
+REM heading ("#...") is shaded, so long lists are easier to follow
 DEF PROCaddl(w%, s$)
+LOCAL c$
 IF nlines%(w%)>=MAXL% THEN ENDPROC
+IF nlines%(w%)=0 THEN zc%(w%)=0
+c$=LEFT$(s$,1):zeb%(w%,nlines%(w%))=FALSE
+IF c$="#" OR s$="" THEN zc%(w%)=0
+IF zon%(w%) AND c$<>"#" AND c$<>"~" AND c$<>"!" AND INSTR(s$,CHR$9)>0 THEN
+  zc%(w%)+=1:zeb%(w%,nlines%(w%))=((zc%(w%) AND 1)=0)
+ENDIF
 L$(w%,nlines%(w%))=s$:nlines%(w%)+=1
 ENDPROC
 
@@ -1158,6 +1170,10 @@ i1%=(oy%-b%!32-topm%) DIV LH%+1:IF i1%>nlines%(j%)-1 THEN i1%=nlines%(j%)-1
 IF i1%<i0% THEN ENDPROC
 FOR i%=i0% TO i1%
   s$=L$(j%,i%):y%=oy%-topm%-(i%+1)*LH%+12
+  IF zeb%(j%,i%) THEN
+    SYS "ColourTrans_SetGCOL",&F7EEE600,,,0,0
+    RECTANGLE FILL ox%,oy%-topm%-(i%+1)*LH%,extw%(j%)+4000,LH%-1
+  ENDIF
   col%=&00000000
   IF LEFT$(s$,1)="#" THEN col%=&A0400000:s$=MID$(s$,2)
   IF LEFT$(s$,1)="~" THEN col%=&70707000:s$=MID$(s$,2)

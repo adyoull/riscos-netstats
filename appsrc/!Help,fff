@@ -1,4 +1,4 @@
-NetStats 1.06-rc12 (12 Oct 2026)
+NetStats 1.06-rc13 (12 Oct 2026)
 ================================
 
 Network statistics for RISC OS. NetStats shows how much your machine is
@@ -145,6 +145,8 @@ re-opened where you left them next time.
 Notes
 -----
 * Windows only redraw the lines that changed, so they don't flicker.
+* In the Devices, Connections and Network tables every other row is
+  shaded, to make the rows easier to follow.
 * Counters are read once a second. All totals are since the stack started
   (normally since the machine was switched on).
 * The ROD stack counts in 64 bits, so the totals do not wrap. The old stack

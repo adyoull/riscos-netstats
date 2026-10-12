@@ -171,6 +171,7 @@ PROCeq(FNshowtabs(L$(WDEV%,4)),"192.168.1.4 | 02:11:22:33:44:55 |  |  | (private
 PROCeq(FNshowtabs(L$(WDEV%,5)),"192.168.1.9 | 00:15:5d:01:02:03 | DESKTOP-ABC | WORKGROUP | Microsoft | ")
 PROCeq(FNshowtabs(L$(WDEV%,6)),"192.168.1.20 | b8:27:eb:12:34:56 | Nas | HOME | Raspberry Pi | en0")
 PROCeq(FNshowtabs(L$(WDEV%,7)),"192.168.1.50 | "+ifmac$(sif%(0))+" | pi4 (this machine) |  | Raspberry Pi | en0")
+s$="":FOR i%=0 TO nlines%(WDEV%)-1:s$+=STR$-zeb%(WDEV%,i%):NEXT:PROCeq(s$,"000010101000000")
 PRINT "== devices (old stack)"
 stack%=1:ifn%=0:fx$="fx/old_iflist":PROCread_ifaces(1):dn%=0:rtfx$="fx/old_routes":PROCread_arp
 PROCeq(STR$dn%+" "+FNipstr(dip%(0))+" "+dmac$(0)+" "+dvend$(0)+" "+dif$(0),"1 10.0.0.5 00:03:93:aa:bb:cc Apple eh0")

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.06-rc13 (12 Oct 2026)
+- Zebra stripes: every other row of the tables in the Devices,
+  Connections and Network windows has a pale blue background, so it is
+  easier to follow a row across the columns.
+
 ## 1.06-rc12 (12 Oct 2026)
 - Devices: when a scan finishes the window is resized to the width of
   the list (as far as the screen allows), so every column is visible.
