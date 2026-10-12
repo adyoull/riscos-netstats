@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.06-rc8 (12 Oct 2026)
+- Network and Devices on the ROD stack: the routing table was read but
+  every entry was skipped. The rc7 Scan details bytes showed why: ROD
+  marks its route messages as type &84 (RTM_GET, 4, with the top bit
+  set), and NetStats only accepted 4. Now the top bit is ignored, so
+  the Network window shows the routes and gateway again and the
+  Devices window gets MAC addresses from the ARP table.
+- Network: DNS servers listed once each (Inet$Resolvers can repeat
+  them).
+
 ## 1.06-rc7 (12 Oct 2026)
 - Devices: Bonjour names. Each address is also sent an mDNS query
   (RFC 6762, unicast to port 5353) for the name behind its address;

@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc7 (12 Oct 2026)"
+app$="NetStats":version$="1.06-rc8 (12 Oct 2026)"
 quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -1682,7 +1682,8 @@ WHILE p%+4<=buf%+n% AND rtn%<MAXRT%
   ml%=FNu16(p%)
   REM a broken length ends the walk
   IF ml%<4 THEN ml%=buf%+n%-p%+4:p%?3=0
-  IF p%?3=4 THEN
+  REM RTM_GET (4); the ROD stack sets the top bit (&84)
+  IF (p%?3 AND &7F)=4 THEN
     IF stack%=2 THEN
       hdr%=FNu16(p%+4):idx%=FNu16(p%+6):addrs%=p%!12:fl%=p%!16:skip%=&600600
     ELSE
@@ -1761,6 +1762,16 @@ IF f% AND 1 THEN =""
 vbuf%?l%=13
 =LEFT$($vbuf%,200)
 
+REM a space-separated list without repeats ("a a b" -> "a b")
+DEF FNdedup(l$)
+LOCAL n%, i%, o$
+n%=FNsplit(l$,cw$())
+IF n%=0 THEN =""
+FOR i%=0 TO n%-1
+  IF INSTR(" "+o$+" "," "+cw$(i%)+" ")=0 THEN o$+=" "+cw$(i%)
+NEXT
+=MID$(o$,2)
+
 DEF PROCtext_net
 LOCAL T$, i%, v$
 T$=CHR$9
@@ -1770,7 +1781,7 @@ PROCaddl(WNET%,"#This machine")
 v$=FNvar("Inet$HostName"):IF v$="" THEN v$="(not set)"
 PROCaddl(WNET%,"Host name"+T$+v$)
 v$=FNvar("Inet$LocalDomain"):IF v$<>"" THEN PROCaddl(WNET%,"Domain"+T$+v$)
-v$=FNvar("Inet$Resolvers"):IF v$="" THEN v$="(none set)"
+v$=FNdedup(FNvar("Inet$Resolvers")):IF v$="" THEN v$="(none set)"
 PROCaddl(WNET%,"DNS servers"+T$+v$)
 IF gw4$<>"" THEN PROCaddl(WNET%,"Gateway"+T$+gw4$) ELSE PROCaddl(WNET%,"Gateway"+T$+"(no default route)")
 IF gw6$<>"" THEN PROCaddl(WNET%,"IPv6 gateway"+T$+gw6$)
@@ -2120,8 +2131,8 @@ p%=buf%
 WHILE p%+4<=buf%+n%
   ml%=FNu16(p%)
   IF ml%<4 THEN ml%=buf%+n%-p%+4:p%?3=0
-  IF p%?3=4 THEN arprt%+=1
-  IF p%?3=4 THEN
+  IF (p%?3 AND &7F)=4 THEN arprt%+=1
+  IF (p%?3 AND &7F)=4 THEN
     IF stack%=2 THEN
       hdr%=FNu16(p%+4):idx%=FNu16(p%+6):addrs%=p%!12:fl%=p%!16:skip%=&600200
     ELSE

@@ -136,6 +136,7 @@ PRINT "== devices"
 n%=FNload("fx/nbquery",t%):PROCnb_query(nbq%,&1234):s$=""
 FOR i%=0 TO 49:IF nbq%?i%<>t%?i% THEN s$+=STR$i%+" "
 NEXT:PROCeq(STR$n%+" "+s$,"50 ")
+PROCeq(FNdedup("192.168.0.59 192.168.0.59 1.1.1.1 192.168.0.59")+"|"+FNdedup(""),"192.168.0.59 1.1.1.1|")
 PROCeq(STR$~FNipparse("192.168.1.20"),"C0A80114"):PROCeq(FNipstr(&C0A80114),"192.168.1.20")
 PROCeq(STR$FNipgt(FNipparse("192.168.1.20"),FNipparse("10.0.0.1"))+STR$FNipgt(&0A000001,&C0A80001),"-10")
 PROCsin(nsa%,&C0A80114,137):s$="":FOR i%=0 TO 15:s$+=STR$~nsa%?i%+" ":NEXT:PROCeq(s$,"10 2 0 89 C0 A8 1 14 0 0 0 0 0 0 0 0 ")

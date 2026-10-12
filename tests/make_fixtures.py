@@ -148,7 +148,8 @@ print('fixtures written to', out)
 def rod_route(index, flags, sas, addrs):
     hdrlen = 96
     body = b''.join(sas)
-    h = struct.pack('<HBBHHHBBiiiiiiI', hdrlen + len(body), 5, 4, hdrlen, index, 0, 0, 0, addrs, flags, 0, 0, 0, 0, 0)
+    # the ROD stack returns rtm_type &84 (RTM_GET with the top bit set): seen on a Pi, rc7
+    h = struct.pack('<HBBHHHBBiiiiiiI', hdrlen + len(body), 5, 0x84, hdrlen, index, 0, 0, 0, addrs, flags, 0, 0, 0, 0, 0)
     h += b'\0' * (hdrlen - len(h))
     return h + body
 
