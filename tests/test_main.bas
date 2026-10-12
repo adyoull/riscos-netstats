@@ -136,6 +136,7 @@ PRINT "== devices"
 n%=FNload("fx/nbquery",t%):PROCnb_query(nbq%,&1234):s$=""
 FOR i%=0 TO 49:IF nbq%?i%<>t%?i% THEN s$+=STR$i%+" "
 NEXT:PROCeq(STR$n%+" "+s$,"50 ")
+PROCeq(FNdevname("RASPBERRY","RasPi")+"|"+FNdevname("YOULLRAID","YoullRAID")+"|"+FNdevname("PC","")+"|"+FNdevname("","Mac-Studio")+"|"+FNdevname("",""),"RASPBERRY/RasPi|YoullRAID|PC|Mac-Studio|")
 PROCeq(FNdedup("192.168.0.59 192.168.0.59 1.1.1.1 192.168.0.59")+"|"+FNdedup(""),"192.168.0.59 1.1.1.1|")
 PROCeq(STR$~FNipparse("192.168.1.20"),"C0A80114"):PROCeq(FNipstr(&C0A80114),"192.168.1.20")
 PROCeq(STR$FNipgt(FNipparse("192.168.1.20"),FNipparse("10.0.0.1"))+STR$FNipgt(&0A000001,&C0A80001),"-10")
@@ -160,16 +161,16 @@ PROCeq(STR$FNmd_ours(nsa%,nbr%),"-1")
 scanmdr%=0:PROCmd_reply(nbr%,n%,FNipparse("192.168.1.58")):d%=FNdev(FNipparse("192.168.1.58"))
 PROCeq(dmd$(d%)+" "+STR$scanmdr%,"Mac-Studio 1")
 nbr%?1=0:PROCeq(STR$FNmd_ours(nsa%,nbr%),"0"):nbr%?0=0:PROCeq(STR$FNmd_ours(nsa%,nbr%),"-1")
-dmd$(FNdev(FNipparse("192.168.1.20")))="nas"
+dmd$(FNdev(FNipparse("192.168.1.20")))="Nas"
 d%=FNdev(FNipparse("192.168.1.50")):PROCdev_mac(d%,ifmac$(sif%(0))):dif$(d%)="en0":dself%(d%)=TRUE:dname$(d%)="pi4"
 scanning%=FALSE:scanned%=TRUE:scantime$="12:00:00":scanmsg$=""
 nlines%(WDEV%)=0:PROCtext_dev:PROCdump(WDEV%)
 PROCeq(L$(WDEV%,0),"~6 devices on en0 192.168.1.0/24 at 12:00:00.  Click to scan again.")
-PROCeq(FNshowtabs(L$(WDEV%,3)),"192.168.1.2 | "+ifmac$(sif%(0))+" |  |  |  | Raspberry Pi | en0")
-PROCeq(FNshowtabs(L$(WDEV%,4)),"192.168.1.4 | 02:11:22:33:44:55 |  |  |  | (private address) | en0")
-PROCeq(FNshowtabs(L$(WDEV%,5)),"192.168.1.9 | 00:15:5d:01:02:03 | DESKTOP-ABC | WORKGROUP |  | Microsoft | ")
-PROCeq(FNshowtabs(L$(WDEV%,6)),"192.168.1.20 | b8:27:eb:12:34:56 | NAS | HOME | nas | Raspberry Pi | en0")
-PROCeq(FNshowtabs(L$(WDEV%,7)),"192.168.1.50 | "+ifmac$(sif%(0))+" | pi4 (this machine) |  |  | Raspberry Pi | en0")
+PROCeq(FNshowtabs(L$(WDEV%,3)),"192.168.1.2 | "+ifmac$(sif%(0))+" |  |  | Raspberry Pi | en0")
+PROCeq(FNshowtabs(L$(WDEV%,4)),"192.168.1.4 | 02:11:22:33:44:55 |  |  | (private address) | en0")
+PROCeq(FNshowtabs(L$(WDEV%,5)),"192.168.1.9 | 00:15:5d:01:02:03 | DESKTOP-ABC | WORKGROUP | Microsoft | ")
+PROCeq(FNshowtabs(L$(WDEV%,6)),"192.168.1.20 | b8:27:eb:12:34:56 | Nas | HOME | Raspberry Pi | en0")
+PROCeq(FNshowtabs(L$(WDEV%,7)),"192.168.1.50 | "+ifmac$(sif%(0))+" | pi4 (this machine) |  | Raspberry Pi | en0")
 PRINT "== devices (old stack)"
 stack%=1:ifn%=0:fx$="fx/old_iflist":PROCread_ifaces(1):dn%=0:rtfx$="fx/old_routes":PROCread_arp
 PROCeq(STR$dn%+" "+FNipstr(dip%(0))+" "+dmac$(0)+" "+dvend$(0)+" "+dif$(0),"1 10.0.0.5 00:03:93:aa:bb:cc Apple eh0")

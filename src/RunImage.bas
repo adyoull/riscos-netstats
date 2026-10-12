@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc10 (12 Oct 2026)"
+app$="NetStats":version$="1.06-rc11 (12 Oct 2026)"
 quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -2276,7 +2276,7 @@ ELSE
   ENDIF
 ENDIF
 PROCaddl(WDEV%,"")
-PROCaddl(WDEV%,"#IP address"+T$+"MAC address"+T$+"NetBIOS name"+T$+"Workgroup"+T$+"Bonjour name"+T$+"Maker"+T$+"Interface")
+PROCaddl(WDEV%,"#IP address"+T$+"MAC address"+T$+"Name"+T$+"Workgroup"+T$+"Maker"+T$+"Interface")
 REM in address order
 IF dn%>0 THEN
   FOR i%=0 TO dn%-1:dord%(i%)=i%:NEXT
@@ -2292,8 +2292,8 @@ IF dn%>0 THEN
     NEXT
   ENDIF
   FOR k%=0 TO dn%-1
-    i%=dord%(k%):s$=dname$(i%):IF dself%(i%) THEN s$+=" (this machine)"
-    PROCaddl(WDEV%,FNipstr(dip%(i%))+T$+dmac$(i%)+T$+s$+T$+dgrp$(i%)+T$+dmd$(i%)+T$+dvend$(i%)+T$+dif$(i%))
+    i%=dord%(k%):s$=FNdevname(dname$(i%),dmd$(i%)):IF dself%(i%) THEN s$+=" (this machine)"
+    PROCaddl(WDEV%,FNipstr(dip%(i%))+T$+dmac$(i%)+T$+s$+T$+dgrp$(i%)+T$+dvend$(i%)+T$+dif$(i%))
   NEXT
 ENDIF
 IF NOT scanning% AND scanned% THEN
@@ -2310,6 +2310,16 @@ IF NOT scanning% AND scanned% THEN
 ENDIF
 PROCautotab(WDEV%,0,64)
 ENDPROC
+
+REM one Name column from the NetBIOS and Bonjour names: the same name
+REM (ignoring case) is shown once, as Bonjour spells it (Bonjour keeps the
+REM owner's capitals; NetBIOS names are upper case); two different names
+REM are both shown, NetBIOS first: "RASPBERRY/RasPi"
+DEF FNdevname(nb$, md$)
+IF md$="" THEN =nb$
+IF nb$="" THEN =md$
+IF FNlower(nb$)=FNlower(md$) THEN =md$
+=nb$+"/"+md$
 
 REM unsigned compare of two addresses
 DEF FNipgt(a%, b%)=(a% EOR &80000000)>(b% EOR &80000000)

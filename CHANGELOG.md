@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.06-rc11 (12 Oct 2026)
+- Devices: the NetBIOS and Bonjour names share one Name column. When
+  both give the same name (ignoring case) it is shown once, as Bonjour
+  spells it (e.g. "YoullRAID" rather than "YOULLRAID"); when they differ
+  both are shown, NetBIOS first ("RASPBERRY/RasPi").
+
 ## 1.06-rc10 (12 Oct 2026)
 - The list windows (Interfaces, Protocols, Connections, Data usage,
   Network, Devices) have a horizontal scroll bar, so wide columns such
