@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc4 (12 Oct 2026)"
+app$="NetStats":version$="1.06-rc5 (12 Oct 2026)"
 quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -108,6 +108,7 @@ DIM sbase%(MAXIF%), scount%(MAXIF%), sown%(MAXIF%), sif%(MAXIF%), sdesc$(MAXIF%)
 DIM nbq% 64, nbr% 600, nsa% 32, nsl% 8, ouib% 64
 scanning%=FALSE:scanned%=FALSE:scansock%=-1:scanmsg$="":scantime$="":nbid%=0
 scantotal%=0:scansent%=0:scanr%=0:scanh%=0:scanend%=0:scanphase%=0:scanretry%=0
+scanok%=0:scanerr%=0:scanerr$="":scanpkt%=0:scanrep%=0:arpll%=0:arpmac%=0:arprt%=0:sin43%=FALSE
 ouih%=0:ouin%=0:ouirs%=24:ouifile$="<NetStats$Dir>.OUI"
 ENDPROC
 
@@ -1792,6 +1793,7 @@ IF f% AND 1 THEN PROCscan_close:scanmsg$="Could not set up the UDP socket.":ENDP
 nbid%=(nbid%+1) AND &FFFF
 PROCnb_query(nbq%,nbid%)
 scanr%=0:scanh%=0:scansent%=0:scanphase%=1:scanning%=TRUE
+scanok%=0:scanerr%=0:scanerr$="":scanpkt%=0:scanrep%=0:arpll%=0:arpmac%=0:arprt%=0
 SYS "OS_ReadMonotonicTime" TO scanend%
 ENDPROC
 
@@ -1831,11 +1833,7 @@ SYS "OS_ReadMonotonicTime" TO now%
 k%=0
 WHILE k%<16 AND scanr%<nsr%
   ip%=sbase%(scanr%)+1+scanh%
-  IF ip%<>sown%(scanr%) THEN
-    PROCsin(nsa%,ip%,137)
-    SYS XSocketSendto%,scansock%,nbq%,50,0,nsa%,16 TO ;f%
-    k%+=1
-  ENDIF
+  IF ip%<>sown%(scanr%) THEN PROCnb_send(ip%):k%+=1
   scansent%+=1:scanh%+=1
   IF scanh%>=scount%(scanr%) THEN scanr%+=1:scanh%=0
   scanend%=now%
@@ -1855,15 +1853,27 @@ PROCread_arp
 scanretry%=0
 IF dn%>0 THEN
   FOR i%=0 TO dn%-1
-    IF dmac$(i%)<>"" AND NOT dnb%(i%) THEN
-      PROCsin(nsa%,dip%(i%),137)
-      SYS XSocketSendto%,scansock%,nbq%,50,0,nsa%,16 TO ;f%
-      scanretry%+=1
-    ENDIF
+    IF dmac$(i%)<>"" AND NOT dnb%(i%) THEN PROCnb_send(dip%(i%)):scanretry%+=1
   NEXT
 ENDIF
 scanphase%=2
 SYS "OS_ReadMonotonicTime" TO scanend%
+ENDPROC
+
+REM send the query to one address. If the stack refuses the 4.4BSD form
+REM of the address, try the 4.3BSD form (16-bit family, no length) once and
+REM keep using whichever works. Counts are shown under the Devices list.
+DEF PROCnb_send(ip%)
+LOCAL f%, e%
+PROCsin(nsa%,ip%,137)
+IF sin43% THEN nsa%?0=AF_INET%:nsa%?1=0
+SYS XSocketSendto%,scansock%,nbq%,50,0,nsa%,16 TO e% ;f%
+IF (f% AND 1) AND NOT sin43% AND scanok%=0 THEN
+  nsa%?0=AF_INET%:nsa%?1=0
+  SYS XSocketSendto%,scansock%,nbq%,50,0,nsa%,16 TO e% ;f%
+  IF (f% AND 1)=0 THEN sin43%=TRUE
+ENDIF
+IF f% AND 1 THEN scanerr%+=1:scanerr$=FNerrstr(e%) ELSE scanok%+=1
 ENDPROC
 
 DEF PROCscan_receive
@@ -1872,6 +1882,7 @@ REPEAT
   !nsl%=16
   SYS XSocketRecvfrom1%,scansock%,nbr%,576,0,nsa%,nsl% TO n% ;f%
   IF (f% AND 1)=0 AND n%>0 THEN
+    scanpkt%+=1
     IF nsa%?2=0 AND nsa%?3=137 AND nbr%?0=nbid%>>8 AND nbr%?1=(nbid% AND 255) THEN PROCnb_reply(nbr%,n%,FNipn(nsa%+4))
   ENDIF
   k%+=1
@@ -1958,7 +1969,7 @@ IF e%+6<=r%+n% AND dmac$(d%)="" THEN
   NEXT
   IF c% THEN PROCdev_mac(d%,FNlower(mac$))
 ENDIF
-dnb%(d%)=TRUE
+dnb%(d%)=TRUE:scanrep%+=1
 ENDPROC
 
 REM ARP entries from the routing table: host routes with RTF_LLINFO whose
@@ -1969,7 +1980,14 @@ IF stack%=0 THEN ENDPROC
 PROCmib(CTL_NET%,PF_ROUTE%,0,0,NET_RT_DUMP%,0)
 n%=FNsysctl(mib%,6,rtbuf%,RTBUFSZ%)
 IF n%<0 THEN scanmsg$="ARP table not available: "+sysctl_err$:ENDPROC
+arpll%=0:arpmac%=0:arprt%=0
 PROCparse_arp(rtbuf%,n%)
+REM nothing found: ask for just the ARP entries (net.route.0.inet.flags.LLINFO)
+IF arpll%=0 THEN
+  PROCmib(CTL_NET%,PF_ROUTE%,0,AF_INET%,2,&400)
+  n%=FNsysctl(mib%,6,rtbuf%,RTBUFSZ%)
+  IF n%>0 THEN PROCparse_arp(rtbuf%,n%)
+ENDIF
 ENDPROC
 
 DEF PROCparse_arp(buf%, n%)
@@ -1978,12 +1996,14 @@ p%=buf%
 WHILE p%+4<=buf%+n%
   ml%=FNu16(p%)
   IF ml%<4 THEN ml%=buf%+n%-p%+4:p%?3=0
+  IF p%?3=4 THEN arprt%+=1
   IF p%?3=4 THEN
     IF stack%=2 THEN
       hdr%=FNu16(p%+4):idx%=FNu16(p%+6):addrs%=p%!12:fl%=p%!16:skip%=&600200
     ELSE
       hdr%=92:idx%=FNu16(p%+4):fl%=p%!8:addrs%=p%!12:skip%=&E00000
     ENDIF
+    IF fl% AND &400 THEN arpll%+=1
     IF (fl% AND &400) AND (fl% AND skip%)=0 THEN
       dst%=0:gw%=0:sa%=p%+hdr%
       FOR bit%=0 TO 7
@@ -1994,7 +2014,8 @@ WHILE p%+4<=buf%+n%
         ENDIF
       NEXT
       IF dst%<>0 AND gw%<>0 THEN
-        IF dst%?1=AF_INET% AND gw%?1=AF_LINK% AND gw%?6=6 THEN
+        IF dst%?1=AF_INET% AND gw%?1=AF_LINK% AND gw%?6>=6 THEN
+          arpmac%+=1
           mac$=""
           FOR i%=0 TO 5
             mac$+=RIGHT$("0"+STR$~(gw%?(8+gw%?5+i%)),2):IF i%<5 THEN mac$+=":"
@@ -2139,6 +2160,11 @@ IF NOT scanning% AND scanned% THEN
   PROCaddl(WDEV%,"")
   PROCaddl(WDEV%,"~Names come from NetBIOS (Windows, Samba, LanMan); other devices show their address only.")
   PROCaddl(WDEV%,"~Devices on other networks (beyond a router) cannot be seen.")
+  s$="~Scan details: "+STR$scanok%+" queries sent"
+  IF scanerr% THEN s$+=" ("+STR$scanerr%+" refused: "+LEFT$(scanerr$,60)+")"
+  IF sin43% THEN s$+=" (old address form)"
+  s$+=", "+STR$scanpkt%+" packets back, "+STR$scanrep%+" NetBIOS replies, "
+  PROCaddl(WDEV%,s$+STR$arpmac%+" ARP entries with MAC ("+STR$arpll%+" ARP, "+STR$arprt%+" routes read).")
 ENDIF
 PROCautotab(WDEV%,0,64)
 ENDPROC

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.06-rc5 (12 Oct 2026)
+- Devices: a tester on the ROD stack (CM4) saw only his own machine.
+  This build shows a "Scan details" line under the list (queries sent
+  and refused, with the stack's error, replies received, ARP entries
+  found) so the cause can be seen, and adds two fallbacks: if the stack
+  refuses the 4.4BSD form of the address it tries the older 4.3BSD
+  form, and if the routing table shows no ARP entries it asks for them
+  directly (net.route.0.inet.flags.LLINFO).
+
 ## 1.06-rc4 (12 Oct 2026)
 - New **Devices** window: the other machines on the local network, with
   IP address, MAC address, NetBIOS name and workgroup, the adapter's
