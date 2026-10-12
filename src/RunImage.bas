@@ -29,7 +29,7 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc5 (12 Oct 2026)"
+app$="NetStats":version$="1.06-rc6 (12 Oct 2026)"
 quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
@@ -108,7 +108,7 @@ DIM sbase%(MAXIF%), scount%(MAXIF%), sown%(MAXIF%), sif%(MAXIF%), sdesc$(MAXIF%)
 DIM nbq% 64, nbr% 600, nsa% 32, nsl% 8, ouib% 64
 scanning%=FALSE:scanned%=FALSE:scansock%=-1:scanmsg$="":scantime$="":nbid%=0
 scantotal%=0:scansent%=0:scanr%=0:scanh%=0:scanend%=0:scanphase%=0:scanretry%=0
-scanok%=0:scanerr%=0:scanerr$="":scanpkt%=0:scanrep%=0:arpll%=0:arpmac%=0:arprt%=0:sin43%=FALSE
+scanok%=0:scanerr%=0:scanerr$="":scanpkt%=0:scanrep%=0:arpll%=0:arpmac%=0:arprt%=0:arpbytes%=0:sin43%=FALSE:nbidhi%=0:nbidlo%=0
 ouih%=0:ouin%=0:ouirs%=24:ouifile$="<NetStats$Dir>.OUI"
 ENDPROC
 
@@ -294,6 +294,20 @@ LOCAL f%, e%
 SYS XSysctl%,mib%,n%,buf%,len%,0,0 TO e% ;f%
 IF f% AND 1 THEN sysctl_err$=FNerrstr(e%):=-1
 =!len%
+
+REM How big a buffer the routing table needs: ask the stack first (no
+REM buffer), as inetstat does, and allow for growth. 1.06-rc4/rc5 always
+REM passed 256K, and the ROD stack returned nothing at that size.
+DEF FNrtsize(n%)
+LOCAL f%, need%
+!len%=0
+SYS XSysctl%,mib%,n%,0,len%,0,0 TO ;f%
+need%=!len%
+IF (f% AND 1) OR need%<=0 THEN =32768
+need%+=need% DIV 4+4096
+IF need%<32768 THEN need%=32768
+IF need%>RTBUFSZ% THEN need%=RTBUFSZ%
+=need%
 
 DEF FNerrstr(e%)
 IF e%=0 THEN ="error"
@@ -1656,7 +1670,7 @@ LOCAL n%
 rtn%=0:gw4$="":gw6$="":rterr$=""
 IF stack%=0 THEN ENDPROC
 PROCmib(CTL_NET%,PF_ROUTE%,0,0,NET_RT_DUMP%,0)
-n%=FNsysctl(mib%,6,rtbuf%,RTBUFSZ%)
+n%=FNsysctl(mib%,6,rtbuf%,FNrtsize(6))
 IF n%<0 THEN rterr$=sysctl_err$:ENDPROC
 PROCparse_routes(rtbuf%,n%)
 ENDPROC
@@ -1790,7 +1804,7 @@ REM non-blocking, or a read with nothing waiting would hang the desktop
 !tmp%=1
 SYS XSocketIoctl%,scansock%,&8004667E,tmp% TO ;f%
 IF f% AND 1 THEN PROCscan_close:scanmsg$="Could not set up the UDP socket.":ENDPROC
-nbid%=(nbid%+1) AND &FFFF
+nbid%=(nbid%+1) AND &FFFF:nbidhi%=nbid%>>8:nbidlo%=nbid% AND 255
 PROCnb_query(nbq%,nbid%)
 scanr%=0:scanh%=0:scansent%=0:scanphase%=1:scanning%=TRUE
 scanok%=0:scanerr%=0:scanerr$="":scanpkt%=0:scanrep%=0:arpll%=0:arpmac%=0:arprt%=0
@@ -1883,11 +1897,15 @@ REPEAT
   SYS XSocketRecvfrom1%,scansock%,nbr%,576,0,nsa%,nsl% TO n% ;f%
   IF (f% AND 1)=0 AND n%>0 THEN
     scanpkt%+=1
-    IF nsa%?2=0 AND nsa%?3=137 AND nbr%?0=nbid%>>8 AND nbr%?1=(nbid% AND 255) THEN PROCnb_reply(nbr%,n%,FNipn(nsa%+4))
+    IF FNnb_ours(nsa%,nbr%) THEN PROCnb_reply(nbr%,n%,FNipn(nsa%+4))
   ENDIF
   k%+=1
 UNTIL (f% AND 1) OR n%<=0 OR k%>=32
 ENDPROC
+
+REM a reply to our query: from port 137, with our transaction ID
+REM (BASIC gives shifts the same priority as "=", so no shift in this test)
+DEF FNnb_ours(sa%, r%)=(sa%?2=0 AND sa%?3=137 AND r%?0=nbidhi% AND r%?1=nbidlo%)
 
 DEF PROCscan_finish
 LOCAL j%, i%, d%
@@ -1978,14 +1996,14 @@ DEF PROCread_arp
 LOCAL n%
 IF stack%=0 THEN ENDPROC
 PROCmib(CTL_NET%,PF_ROUTE%,0,0,NET_RT_DUMP%,0)
-n%=FNsysctl(mib%,6,rtbuf%,RTBUFSZ%)
+n%=FNsysctl(mib%,6,rtbuf%,FNrtsize(6))
 IF n%<0 THEN scanmsg$="ARP table not available: "+sysctl_err$:ENDPROC
-arpll%=0:arpmac%=0:arprt%=0
+arpll%=0:arpmac%=0:arprt%=0:arpbytes%=n%
 PROCparse_arp(rtbuf%,n%)
 REM nothing found: ask for just the ARP entries (net.route.0.inet.flags.LLINFO)
 IF arpll%=0 THEN
   PROCmib(CTL_NET%,PF_ROUTE%,0,AF_INET%,2,&400)
-  n%=FNsysctl(mib%,6,rtbuf%,RTBUFSZ%)
+  n%=FNsysctl(mib%,6,rtbuf%,FNrtsize(6))
   IF n%>0 THEN PROCparse_arp(rtbuf%,n%)
 ENDIF
 ENDPROC
@@ -2164,7 +2182,8 @@ IF NOT scanning% AND scanned% THEN
   IF scanerr% THEN s$+=" ("+STR$scanerr%+" refused: "+LEFT$(scanerr$,60)+")"
   IF sin43% THEN s$+=" (old address form)"
   s$+=", "+STR$scanpkt%+" packets back, "+STR$scanrep%+" NetBIOS replies, "
-  PROCaddl(WDEV%,s$+STR$arpmac%+" ARP entries with MAC ("+STR$arpll%+" ARP, "+STR$arprt%+" routes read).")
+  PROCaddl(WDEV%,s$+STR$arpmac%+" ARP entries with MAC")
+  PROCaddl(WDEV%,"~("+STR$arpll%+" ARP, "+STR$arprt%+" routes in "+STR$arpbytes%+" bytes read from the stack).")
 ENDIF
 PROCautotab(WDEV%,0,64)
 ENDPROC

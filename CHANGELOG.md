@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.06-rc6 (12 Oct 2026)
+- Devices: NetBIOS replies were thrown away. The check on the reply's
+  ID had a shift ("ID>>8") inside a comparison, and BBC BASIC gives
+  shifts the same priority as "=", so the test was always false. The
+  rc5 Scan details showed it: 4 packets back, 0 NetBIOS replies.
+- Devices and Network: the routing table read returned nothing on the
+  ROD stack (rc5 Scan details: 0 routes). The buffer size is now asked
+  for first, as inetstat does, instead of always passing 256K. The
+  Scan details line also shows how many bytes the stack returned.
+
 ## 1.06-rc5 (12 Oct 2026)
 - Devices: a tester on the ROD stack (CM4) saw only his own machine.
   This build shows a "Scan details" line under the list (queries sent

@@ -145,6 +145,9 @@ stack%=2:ifn%=0:fx$="fx/rod_iflist":PROCread_ifaces(1)
 PROCscan_ranges:PROCeq(STR$nsr%+" "+sdesc$(0)+" "+STR$scantotal%+" "+FNipstr(sbase%(0))+" "+FNipstr(sown%(0)),"1 en0 192.168.1.0/24 254 192.168.1.0 192.168.1.50")
 dn%=0:rtfx$="fx/rod_routes":PROCread_arp
 PROCeq(STR$dn%,"3")
+n%=FNload("fx/nbstat_win",nbr%):nbid%=&1234:nbidhi%=&12:nbidlo%=&34:PROCsin(nsa%,0,137)
+PROCeq(STR$FNnb_ours(nsa%,nbr%),"-1"):nbidlo%=&35:PROCeq(STR$FNnb_ours(nsa%,nbr%),"0"):nbidlo%=&34:nsa%?3=138:PROCeq(STR$FNnb_ours(nsa%,nbr%),"0")
+nbid%=1:nbidhi%=0:nbidlo%=1:nbr%?0=0:nbr%?1=1:nsa%?3=137:PROCeq(STR$FNnb_ours(nsa%,nbr%),"-1"):nbr%?0=&12:nbr%?1=&34
 n%=FNload("fx/nbstat_win",nbr%):PROCnb_reply(nbr%,n%,FNipparse("192.168.1.9"))
 n%=FNload("fx/nbstat_samba",nbr%):PROCnb_reply(nbr%,n%,FNipparse("192.168.1.20"))
 d%=FNdev(FNipparse("192.168.1.50")):PROCdev_mac(d%,ifmac$(sif%(0))):dif$(d%)="en0":dself%(d%)=TRUE:dname$(d%)="pi4"
@@ -199,6 +202,9 @@ CLOSE#x%
 =l%
 
 REM mock: system variables
+REM mock: routing table size probe
+DEF FNrtsize(n%)=32768
+
 REM mock: desktop font width
 DEF FNtextw(s$)=16*LEN(s$)
 
