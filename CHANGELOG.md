@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.06 (12 Oct 2026)
+Release of 1.06-rc13, tested on a Raspberry Pi with the ROD stack.
+- New **Devices** window: the other machines on the local network with
+  IP address, MAC address, name (NetBIOS and/or Bonjour), workgroup,
+  adapter maker (IEEE list) and interface. Scans by NetBIOS node status
+  and mDNS queries to each local address plus the stack's ARP table.
+- Network window: the routing table and default gateway now show on
+  the ROD stack (its route messages are type &84); DNS servers listed
+  once each.
+- Connections: columns sized to their contents; works with the
+  Internet 5 stack's inetstat ("ip" lines).
+- Icon bar: plain icon when rates are off; the rate label keeps its
+  width (three figures).
+- List windows have horizontal scroll bars; tables are zebra striped;
+  the Devices window fits its width after a scan.
+- Correction to 1.05: TaskWindow_Output does not need acknowledging
+  (the ROOL PRM wiki is wrong; thanks to Matthew Phillips and Steve
+  Fryatt). The unused code was removed.
+- Details of each test build are below.
+
 ## 1.06-rc13 (12 Oct 2026)
 - Zebra stripes: every other row of the tables in the Devices,
   Connections and Network windows has a pale blue background, so it is
