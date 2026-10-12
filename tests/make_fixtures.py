@@ -169,9 +169,41 @@ r += rod_route(3, RTF_UP | RTF_HOST, [sin([127, 0, 0, 1]), sin([127, 0, 0, 1])],
 ll1 = [0xFE, 0x80, 0, 1] + [0] * 11 + [1]
 r += rod_route(1, RTF_UP | RTF_GW, [sin6([0] * 16), sin6(ll1), sa_pad(bytes([0, 0, 0, 0]))], 7)
 r += rod_route(1, RTF_UP, [sin6([0x20, 1, 0x0d, 0xb8, 0x12, 0x34, 0x56, 0x78] + [0] * 8), sdl(1, 6, 'en0', mac), mask6(64)], 7)
+# more ARP entries (Devices window): a Raspberry Pi, an incomplete entry, a private MAC
+RTF_LLINFO = 0x400
+r += rod_route(1, RTF_UP | RTF_HOST | RTF_LLINFO, [sin([192, 168, 1, 20]), sdl(1, 6, 'en0', bytes([0xB8, 0x27, 0xEB, 0x12, 0x34, 0x56]))], 3)
+r += rod_route(1, RTF_UP | RTF_HOST | RTF_LLINFO, [sin([192, 168, 1, 30]), sdl(1, 6, 'en0', b'')], 3)
+r += rod_route(1, RTF_UP | RTF_HOST | RTF_LLINFO, [sin([192, 168, 1, 4]), sdl(1, 6, 'en0', bytes([0x02, 0x11, 0x22, 0x33, 0x44, 0x55]))], 3)
+r += rod_route(1, RTF_UP | RTF_HOST | RTF_LLINFO | 0x400000, [sin([192, 168, 1, 255]), sdl(1, 6, 'en0', mac)], 3)  # broadcast: not a device
 open(os.path.join(out, 'rod_routes'), 'wb').write(r)
 o = b''
 o += old_route(1, RTF_UP | RTF_GW, [sin([0, 0, 0, 0]), sin([10, 0, 0, 1]), sa_pad(bytes([0, 0, 0, 0]))], 7)
 o += old_route(1, RTF_UP, [sin([10, 0, 0, 0]), sdl(1, 6, 'eh0', mac), mask4(16)], 7)
 o += old_route(1, RTF_UP | RTF_HOST | 0x800000, [sin([224, 0, 0, 1]), sdl(1, 6, 'eh0', mac)], 3)        # multicast: skipped
+o += old_route(1, RTF_UP | RTF_HOST | 0x400, [sin([10, 0, 0, 5]), sdl(1, 6, 'eh0', bytes([0x00, 0x03, 0x93, 0xAA, 0xBB, 0xCC]))], 3)
 open(os.path.join(out, 'old_routes'), 'wb').write(o)
+
+# ---------------------------------------------------------------- NetBIOS (RFC 1002)
+def nbname(n):
+    raw = n.encode().ljust(16, b'\0') if n == '*' else n.encode()
+    enc = bytes(b for c in raw for b in (0x41 + (c >> 4), 0x41 + (c & 15)))
+    return bytes([32]) + enc + b'\0'
+q = struct.pack('>HHHHHH', 0x1234, 0, 1, 0, 0, 0) + nbname('*') + struct.pack('>HH', 0x21, 1)
+assert len(q) == 50
+open(os.path.join(out, 'nbquery'), 'wb').write(q)
+def nbstat(names, mac, compress=False):
+    rr = b'\xc0\x0c' if compress else nbname('*')
+    body = bytes([len(names)])
+    for n, sfx, group in names:
+        body += n.encode().ljust(15, b' ') + bytes([sfx]) + struct.pack('>H', (0x8000 if group else 0) | 0x0400)
+    body += mac + b'\0' * 40
+    return struct.pack('>HHHHHH', 0x1234, 0x8400, 0, 1, 0, 0) + rr + struct.pack('>HHIH', 0x21, 1, 0, len(body)) + body
+open(os.path.join(out, 'nbstat_win'), 'wb').write(nbstat(
+    [('DESKTOP-ABC', 0, False), ('WORKGROUP', 0, True), ('DESKTOP-ABC', 0x20, False), ('WORKGROUP', 0x1e, True)],
+    bytes([0x00, 0x15, 0x5D, 0x01, 0x02, 0x03])))
+open(os.path.join(out, 'nbstat_samba'), 'wb').write(nbstat(
+    [('NAS', 0x20, False), ('NAS', 0, False), ('HOME', 0, True)], bytes(6), compress=True))
+# a small manufacturer table in the OUI file format
+open(os.path.join(out, 'oui.tsv'), 'w').write('000393\tApple\n00155D\tMicrosoft\nB827EB\tRaspberry Pi\n')
+import subprocess
+subprocess.check_call([sys.executable, os.path.join(here, '..', 'tools', 'mkoui.py'), 'bin', os.path.join(out, 'oui.tsv'), os.path.join(out, 'oui')])

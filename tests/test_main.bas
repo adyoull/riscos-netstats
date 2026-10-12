@@ -132,8 +132,42 @@ PRINT "== connections (unrecognised output)"
 crn%=2:cr$(0)="Something odd":cr$(1)="happened here"
 nlines%(WCONN%)=0:PROCparse_conn("inetstat -an")
 PROCeq(STR$nlines%(WCONN%)+L$(WCONN%,3),"4~happened here")
-PRINT "failures: ";nfail%
+PRINT "== devices"
+n%=FNload("fx/nbquery",t%):PROCnb_query(nbq%,&1234):s$=""
+FOR i%=0 TO 49:IF nbq%?i%<>t%?i% THEN s$+=STR$i%+" "
+NEXT:PROCeq(STR$n%+" "+s$,"50 ")
+PROCeq(STR$~FNipparse("192.168.1.20"),"C0A80114"):PROCeq(FNipstr(&C0A80114),"192.168.1.20")
+PROCeq(STR$FNipgt(FNipparse("192.168.1.20"),FNipparse("10.0.0.1"))+STR$FNipgt(&0A000001,&C0A80001),"-10")
+PROCsin(nsa%,&C0A80114,137):s$="":FOR i%=0 TO 15:s$+=STR$~nsa%?i%+" ":NEXT:PROCeq(s$,"10 2 0 89 C0 A8 1 14 0 0 0 0 0 0 0 0 ")
+ouifile$="fx/oui":ouih%=0
+PROCeq(FNvendor("00:03:93:aa:bb:cc")+"|"+FNvendor("b8:27:eb:00:00:01")+"|"+FNvendor("02:11:22:33:44:55")+"|"+FNvendor("00:00:01:00:00:00"),"Apple|Raspberry Pi|(private address)|")
+stack%=2:ifn%=0:fx$="fx/rod_iflist":PROCread_ifaces(1)
+PROCscan_ranges:PROCeq(STR$nsr%+" "+sdesc$(0)+" "+STR$scantotal%+" "+FNipstr(sbase%(0))+" "+FNipstr(sown%(0)),"1 en0 192.168.1.0/24 254 192.168.1.0 192.168.1.50")
+dn%=0:rtfx$="fx/rod_routes":PROCread_arp
+PROCeq(STR$dn%,"3")
+n%=FNload("fx/nbstat_win",nbr%):PROCnb_reply(nbr%,n%,FNipparse("192.168.1.9"))
+n%=FNload("fx/nbstat_samba",nbr%):PROCnb_reply(nbr%,n%,FNipparse("192.168.1.20"))
+d%=FNdev(FNipparse("192.168.1.50")):PROCdev_mac(d%,ifmac$(sif%(0))):dif$(d%)="en0":dself%(d%)=TRUE:dname$(d%)="pi4"
+scanning%=FALSE:scanned%=TRUE:scantime$="12:00:00":scanmsg$=""
+nlines%(WDEV%)=0:PROCtext_dev:PROCdump(WDEV%)
+PROCeq(L$(WDEV%,0),"~5 devices on en0 192.168.1.0/24 at 12:00:00.  Click to scan again.")
+PROCeq(FNshowtabs(L$(WDEV%,3)),"192.168.1.2 | "+ifmac$(sif%(0))+" |  |  | Raspberry Pi | en0")
+PROCeq(FNshowtabs(L$(WDEV%,4)),"192.168.1.4 | 02:11:22:33:44:55 |  |  | (private address) | en0")
+PROCeq(FNshowtabs(L$(WDEV%,5)),"192.168.1.9 | 00:15:5d:01:02:03 | DESKTOP-ABC | WORKGROUP | Microsoft | ")
+PROCeq(FNshowtabs(L$(WDEV%,6)),"192.168.1.20 | b8:27:eb:12:34:56 | NAS | HOME | Raspberry Pi | en0")
+PROCeq(FNshowtabs(L$(WDEV%,7)),"192.168.1.50 | "+ifmac$(sif%(0))+" | pi4 (this machine) |  | Raspberry Pi | en0")
+PRINT "== devices (old stack)"
+stack%=1:ifn%=0:fx$="fx/old_iflist":PROCread_ifaces(1):dn%=0:rtfx$="fx/old_routes":PROCread_arp
+PROCeq(STR$dn%+" "+FNipstr(dip%(0))+" "+dmac$(0)+" "+dvend$(0)+" "+dif$(0),"1 10.0.0.5 00:03:93:aa:bb:cc Apple eh0")
+PROCoui_close:PRINT "failures: ";nfail%
 END
+
+DEF FNload(f$, buf%)
+LOCAL x%, l%, i%
+x%=OPENIN(f$):l%=EXT#x%
+FOR i%=0 TO l%-1:buf%?i%=BGET#x%:NEXT
+CLOSE#x%
+=l%
 
 DEF PROCeq(a$,b$)
 IF a$<>b$ THEN PRINT "FAIL: got [";a$;"] want [";b$;"]":nfail%+=1 ELSE PRINT "ok   ";b$

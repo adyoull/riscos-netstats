@@ -9,6 +9,9 @@ Network statistics for RISC OS that work with the
   per-direction rate, bytes, packets, errors and drops
 - **Protocols**: TCP, UDP and IP counters with the change per second
 - **Connections**: open TCP/UDP sockets (from the stack's `inetstat -an`, run in a TaskWindow)
+- **Data usage** and **Network** (host name, DNS, gateway, routing table)
+- **Devices**: other machines on the local network, with IP and MAC address, NetBIOS name and
+  workgroup, and the adapter's maker (scan with NetBIOS node status queries + the ARP table)
 - Current rates under the icon bar icon; bits/s or bytes/s; settings and window
   positions saved in Choices
 
@@ -32,13 +35,16 @@ The program is BBC BASIC; `src/RunImage.bas` is the text source (no line numbers
 - `tools/tokenise.py` – text to tokenised BASIC (&FFB)
 - `tools/mksprites.py` – draws `!Sprites` (32bpp with mask)
 - `tools/rozip.py` – zip keeping RISC OS filetypes (`name,xxx` files)
-- `tests/make_fixtures.py` – sysctl replies in both stacks' struct layouts
+- `tools/mkoui.py` – the manufacturer table: IEEE `oui.txt` → `data/oui.tsv` → `!NetStats.OUI`
+- `tests/make_fixtures.py` – sysctl replies in both stacks' struct layouts, NetBIOS replies
 
 Files named `name,xxx` carry their RISC OS filetype (`,feb` Obey, `,fff` Text).
 
 ## Credits
 
 Inspired by SockStats and SockStatsLite by Chris Williams.
+Manufacturer names: IEEE Registration Authority public MA-L (OUI) listing
+(`data/oui.tsv`, taken from the copy in the netaddr 1.3.0 Python package; names shortened).
 Parts of this program were written with the help of an AI assistant.
 
 ## Licence

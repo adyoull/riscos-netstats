@@ -29,8 +29,8 @@ REM Initialisation
 REM ===========================================================================
 DEF PROCinit
 LOCAL j%
-app$="NetStats":version$="1.06-rc3 (05 Oct 2026)"
-quit%=FALSE:task%=0
+app$="NetStats":version$="1.06-rc4 (12 Oct 2026)"
+quit%=FALSE:task%=0:restoring%=FALSE:scansock%=-1
 DIM b% 1024, tmp% 256
 REM Wimp
 DIM msgs% 32
@@ -48,15 +48,19 @@ PROCiconbar
 SYS "OS_ReadMonotonicTime" TO last%
 next%=FNtadd(last%,interval%):usave%=last%
 PROCsample(TRUE)
+REM (the Devices window comes back without scanning: click to scan)
+restoring%=TRUE
 FOR j%=0 TO NWIN%-1
   IF wwasopen%(j%) THEN PROCopen(j%)
 NEXT
+restoring%=FALSE
 IF stack%=0 THEN PROCreport("No Internet module is loaded, so there is nothing to measure. Start networking (!Boot > Configure > Network) and run "+app$+" again.")
 ENDPROC
 
 DEF PROCconstants
 REM Socket SWIs, X form (works even if the module is not present)
 XSysctl%=&6121A:XInternalLookup%=&61221:XSocketVersion%=&61222
+XSocketCreat%=&61200:XSocketSendto%=&61209:XSocketRecvfrom1%=&6121C:XSocketIoctl%=&61212:XSocketClose%=&61210
 CTL_NET%=4:PF_INET%=2:PF_ROUTE%=17:NET_RT_IFLIST%=3
 RTM_NEWADDR%=&C:RTM_IFINFO%=&E
 RTA_NETMASK%=4:RTA_IFP%=&10:RTA_IFA%=&20:NET_RT_DUMP%=1
@@ -65,8 +69,8 @@ iffup%=1:iffloop%=8:iffrun%=&40
 interval%=100:HN%=300:LH%=40:topm%=12
 MAXIF%=24:MAXL%=400
 REM window indices
-WMON%=0:WIF%=1:WPROT%=2:WCONN%=3:WUSE%=4:WNET%=5:NWIN%=6
-MAXDAYS%=400:MAXRT%=120
+WMON%=0:WIF%=1:WPROT%=2:WCONN%=3:WUSE%=4:WNET%=5:WDEV%=6:NWIN%=7
+MAXDAYS%=400:MAXRT%=120:MAXDEV%=255:MAXSCAN%=1024
 ENDPROC
 
 DEF PROCalloc
@@ -90,12 +94,21 @@ sessin=0:sessout=0:sessstart$="":usave%=0
 REM chosen interface ("" = all) and the menu of interfaces
 selif$="":DIM ifmname$(MAXIF%+1)
 REM routes and network settings
-DIM rtbuf% 32768, vbuf% 256:rtn%=0:DIM rt$(MAXRT%):gw4$="":gw6$="":rterr$="":netstamp%=0
+REM routing table: big enough for the ARP entries a /22 scan leaves
+RTBUFSZ%=262144:DIM rtbuf% RTBUFSZ%, vbuf% 256:rtn%=0:DIM rt$(MAXRT%):gw4$="":gw6$="":rterr$="":netstamp%=0
 totin=0:totout=0:sumib=0:sumob=0:nactive%=0:srcnote$=""
 bits%=FALSE:loopback%=FALSE:autoconn%=FALSE:ibrates%=TRUE
 DIM wpos%(NWIN%-1,3), wposok%(NWIN%-1), wwasopen%(NWIN%-1)
 connstamp%=0:connbusy%=FALSE:conntask%=0:conntxt%=&4E537478:crn%=0:cpart$=""
 MAXCR%=600:DIM cr$(MAXCR%)
+REM devices found by a network scan
+DIM dip%(MAXDEV%), dmac$(MAXDEV%), dname$(MAXDEV%), dgrp$(MAXDEV%), dvend$(MAXDEV%), dif$(MAXDEV%)
+DIM dself%(MAXDEV%), dnb%(MAXDEV%), dord%(MAXDEV%):dn%=0
+DIM sbase%(MAXIF%), scount%(MAXIF%), sown%(MAXIF%), sif%(MAXIF%), sdesc$(MAXIF%):nsr%=0
+DIM nbq% 64, nbr% 600, nsa% 32, nsl% 8, ouib% 64
+scanning%=FALSE:scanned%=FALSE:scansock%=-1:scanmsg$="":scantime$="":nbid%=0
+scantotal%=0:scansent%=0:scanr%=0:scanh%=0:scanend%=0:scanphase%=0:scanretry%=0
+ouih%=0:ouin%=0:ouirs%=24:ouifile$="<NetStats$Dir>.OUI"
 ENDPROC
 
 REM ---------------------------------------------------------------------------
@@ -122,6 +135,7 @@ SYS "XOS_Module",18,"Internet" TO ,,,base% ;f%
 IF f% AND 1 THEN base%=0
 IF base%<>modbase% THEN
   PROCdetect_stack:leg_done%=FALSE:stfirst%=TRUE
+  IF scanning% THEN scansock%=-1:scanning%=FALSE:scanmsg$="The Internet module was restarted during the scan."
   IF ifn%>0 THEN FOR f%=0 TO ifn%-1:iffirst%(f%)=TRUE:NEXT
 ENDIF
 ENDPROC
@@ -155,10 +169,14 @@ REM ===========================================================================
 REM Main loop
 REM ===========================================================================
 DEF PROCpoll
-LOCAL reason%, now%
-SYS "Wimp_PollIdle",&30,b%,next% TO reason%
+LOCAL reason%, now%, w%
+REM while a network scan runs, wake every few centiseconds
+w%=next%
+IF scanning% THEN SYS "OS_ReadMonotonicTime" TO now%:w%=FNtadd(now%,4)
+SYS "Wimp_PollIdle",&30,b%,w% TO reason%
 CASE reason% OF
   WHEN 0
+    IF scanning% THEN PROCscan_step
     SYS "OS_ReadMonotonicTime" TO now%
     IF FNtdiff(now%,next%)>=0 THEN
       PROCsample(FALSE)
@@ -180,6 +198,8 @@ ENDPROC
 
 DEF PROCshutdown
 PROCtw_kill
+PROCscan_close
+PROCoui_close
 PROCsave_choices
 PROCsave_usage
 SYS "XWimp_CloseDown",task%,&4B534154
@@ -187,6 +207,7 @@ ENDPROC
 
 DEF PROCfatal(e$)
 ON ERROR OFF
+IF scansock%>=0 THEN SYS "XSocket_Close",scansock%
 !tmp%=255:$(tmp%+4)=LEFT$(e$,200)+CHR$0
 SYS "XWimp_ReportError",tmp%,1,"NetStats"
 IF task% THEN SYS "XWimp_CloseDown",task%,&4B534154
@@ -229,7 +250,7 @@ REM the Network window updates itself every 5 seconds while it is open
 IF wopen%(WNET%) AND FNtdiff(now%,netstamp%)>=500 THEN PROCbuild_one(WNET%)
 FOR j%=0 TO NWIN%-1
   IF wopen%(j%) THEN
-    IF j%<>WCONN% AND j%<>WNET% THEN PROCbuild_one(j%)
+    IF j%<>WCONN% AND j%<>WNET% AND (j%<>WDEV% OR scanning%) THEN PROCbuild_one(j%)
     IF j%<>WCONN% THEN PROCrefresh(j%)
   ENDIF
 NEXT
@@ -768,6 +789,7 @@ CASE j% OF
   WHEN WPROT%:PROCtext_stats
   WHEN WUSE%:PROCtext_usage
   WHEN WNET%:PROCread_routes:PROCtext_net:SYS "OS_ReadMonotonicTime" TO netstamp%
+  WHEN WDEV%:PROCtext_dev
 ENDCASE
 ENDPROC
 
@@ -845,6 +867,7 @@ wh%(WPROT%)=FNwindow("Protocol statistics",820,640,1000,4000,&BF000002,0,0)
 wh%(WCONN%)=FNwindow("Connections",1300,560,1400,8000,&BF000002,0,0)
 wh%(WUSE%)=FNwindow("Data usage",900,600,1000,4000,&BF000002,0,0)
 wh%(WNET%)=FNwindow("Network",1160,560,1400,8000,&BF000002,0,0)
+wh%(WDEV%)=FNwindow("Devices",1300,600,1400,8000,&BF000002,0,0)
 REM tab stops (negative = right aligned at that x)
 tab%(WIF%,0)=16:tab%(WIF%,1)=150:tab%(WIF%,2)=-380:tab%(WIF%,3)=-560:tab%(WIF%,4)=-770:tab%(WIF%,5)=-900:tab%(WIF%,6)=-1030
 tab%(WPROT%,0)=16:tab%(WPROT%,1)=-600:tab%(WPROT%,2)=-790
@@ -852,6 +875,7 @@ REM queue columns right-aligned with room for their headings (~110 wide)
 tab%(WCONN%,0)=16:tab%(WCONN%,1)=100:tab%(WCONN%,2)=470:tab%(WCONN%,3)=840:tab%(WCONN%,4)=-1130:tab%(WCONN%,5)=-1270
 tab%(WUSE%,0)=16:tab%(WUSE%,1)=-520:tab%(WUSE%,2)=-700:tab%(WUSE%,3)=-880
 tab%(WNET%,0)=16:tab%(WNET%,1)=240:tab%(WNET%,2)=420:tab%(WNET%,3)=880:tab%(WNET%,4)=980
+tab%(WDEV%,0)=16:tab%(WDEV%,1)=260:tab%(WDEV%,2)=560:tab%(WDEV%,3)=860:tab%(WDEV%,4)=1100
 PROCcreate_info
 ENDPROC
 
@@ -993,6 +1017,7 @@ PROCbuild_one(j%)
 PROCset_extent(j%)
 IF j%<>WMON% AND j%<>WCONN% THEN PROCrefresh_full(j%)
 IF j%=WCONN% THEN PROCconnections
+IF j%=WDEV% AND NOT scanned% AND NOT restoring% THEN PROCscan_start:PROCbuild_one(WDEV%):PROCrefresh_full(WDEV%)
 ENDPROC
 
 DEF PROCclose(h%)
@@ -1397,11 +1422,12 @@ IF bt%=2 THEN PROCshow_menu(b%!0-64,b%!4):ENDPROC
 j%=FNwhich(w%)
 IF j%=WCONN% THEN PROCconnections
 IF j%=WNET% THEN PROCbuild_one(WNET%):PROCrefresh_full(WNET%)
+IF j%=WDEV% AND NOT scanning% THEN PROCscan_start:PROCbuild_one(WDEV%):PROCrefresh_full(WDEV%)
 ENDPROC
 
 DEF PROCcreate_menu
 LOCAL i%, t$, fl%, tx%
-NMI%=14
+NMI%=15
 DIM menu% 28+24*NMI%, mtext%(NMI%)
 $menu%="NetStats":menu%?12=7:menu%?13=2:menu%?14=7:menu%?15=0
 menu%!16=25*16:menu%!20=44:menu%!24=0
@@ -1424,7 +1450,7 @@ FOR i%=0 TO MAXIF%
   ifmenu%!(28+i%*24)=0:ifmenu%!(32+i%*24)=-1:ifmenu%!(36+i%*24)=&07000121
   ifmenu%!(40+i%*24)=tx%:ifmenu%!(44+i%*24)=-1:ifmenu%!(48+i%*24)=24
 NEXT
-menu%!(32+7*24)=ifmenu%
+menu%!(32+8*24)=ifmenu%
 ENDPROC
 DATA Info,0
 DATA Monitor,0
@@ -1432,7 +1458,8 @@ DATA Interfaces,0
 DATA Protocols,0
 DATA Connections,0
 DATA Data usage,0
-DATA Network,2
+DATA Network,0
+DATA Devices,2
 DATA Interface,0
 DATA Show bits/s,0
 DATA Include loopback,0
@@ -1464,8 +1491,8 @@ ENDPROC
 
 DEF PROCshow_menu(x%, y%)
 LOCAL j%
-PROCtick(8,bits%):PROCtick(9,loopback%):PROCtick(10,ibrates%):PROCtick(11,autoconn%)
-REM items 1-6 are the windows: tick the ones that are open
+PROCtick(9,bits%):PROCtick(10,loopback%):PROCtick(11,ibrates%):PROCtick(12,autoconn%)
+REM items 1-7 are the windows: tick the ones that are open
 FOR j%=0 TO NWIN%-1:PROCtick(j%+1,wopen%(j%)):NEXT
 PROCfill_ifmenu
 mx%=x%:my%=y%
@@ -1477,19 +1504,19 @@ LOCAL i%
 i%=!b%
 SYS "Wimp_GetPointerInfo",,tmp%
 CASE i% OF
-  WHEN 1,2,3,4,5,6
+  WHEN 1,2,3,4,5,6,7
     REM a ticked (open) window is closed again, an unticked one opened
     IF wopen%(i%-1) THEN PROCclosewin(i%-1) ELSE PROCopen(i%-1)
-  WHEN 7
+  WHEN 8
     IF b%!4>=0 AND b%!4<=MAXIF% THEN
       IF ifmname$(b%!4)<>selif$ THEN selif$=ifmname$(b%!4):hcount%=0:PROCtotals:PROCbuild_text:PROCrefresh_all:PROCiconbar_text
     ENDIF
-  WHEN 8:bits%=NOT bits%:PROCbuild_text:PROCrefresh_all:PROCiconbar_text
-  WHEN 9:loopback%=NOT loopback%:hcount%=0:PROCtotals:PROCrefresh_all:PROCiconbar_text
-  WHEN 10:ibrates%=NOT ibrates%:PROCiconbar_make:PROCiconbar_text
-  WHEN 11:autoconn%=NOT autoconn%
-  WHEN 12:PROCsession_reset:IF wopen%(WUSE%) THEN PROCbuild_one(WUSE%):PROCrefresh(WUSE%)
-  WHEN 13:quit%=TRUE
+  WHEN 9:bits%=NOT bits%:PROCbuild_text:PROCrefresh_all:PROCiconbar_text
+  WHEN 10:loopback%=NOT loopback%:hcount%=0:PROCtotals:PROCrefresh_all:PROCiconbar_text
+  WHEN 11:ibrates%=NOT ibrates%:PROCiconbar_make:PROCiconbar_text
+  WHEN 12:autoconn%=NOT autoconn%
+  WHEN 13:PROCsession_reset:IF wopen%(WUSE%) THEN PROCbuild_one(WUSE%):PROCrefresh(WUSE%)
+  WHEN 14:quit%=TRUE
 ENDCASE
 IF NOT quit% THEN PROCsave_choices
 IF (tmp%!8 AND 1) AND NOT quit% THEN PROCshow_menu(mx%,my%)
@@ -1628,7 +1655,7 @@ LOCAL n%
 rtn%=0:gw4$="":gw6$="":rterr$=""
 IF stack%=0 THEN ENDPROC
 PROCmib(CTL_NET%,PF_ROUTE%,0,0,NET_RT_DUMP%,0)
-n%=FNsysctl(mib%,6,rtbuf%,32768)
+n%=FNsysctl(mib%,6,rtbuf%,RTBUFSZ%)
 IF n%<0 THEN rterr$=sysctl_err$:ENDPROC
 PROCparse_routes(rtbuf%,n%)
 ENDPROC
@@ -1740,6 +1767,384 @@ FOR i%=0 TO rtn%-1:PROCaddl(WNET%,rt$(i%)):NEXT
 PROCaddl(WNET%,"")
 PROCaddl(WNET%,"~Flags: U up, G via a gateway, H host, S static, D dynamic (redirect)")
 ENDPROC
+
+REM ===========================================================================
+REM Devices: other machines on the local network(s).
+REM A scan sends a NetBIOS node status query (UDP port 137) to every address
+REM on each local IPv4 subnet. Sending makes the stack ARP for each address,
+REM so afterwards its ARP table (read from the routing table) lists every
+REM machine that answered ARP, with its MAC address; machines that also
+REM answer NetBIOS (Windows, Samba, LanMan) give their name and workgroup.
+REM ===========================================================================
+DEF PROCscan_start
+LOCAL f%
+IF scanning% THEN ENDPROC
+dn%=0:scanmsg$="":scanned%=TRUE
+IF stack%=0 THEN scanmsg$="No Internet module is loaded.":nsr%=0:ENDPROC
+PROCscan_ranges
+IF nsr%=0 THEN scanmsg$="No local IPv4 network to scan (no interface with an IPv4 address is up).":ENDPROC
+SYS XSocketCreat%,AF_INET%,2,0 TO scansock% ;f%
+IF f% AND 1 THEN scansock%=-1:scanmsg$="Could not open a UDP socket.":ENDPROC
+REM non-blocking, or a read with nothing waiting would hang the desktop
+!tmp%=1
+SYS XSocketIoctl%,scansock%,&8004667E,tmp% TO ;f%
+IF f% AND 1 THEN PROCscan_close:scanmsg$="Could not set up the UDP socket.":ENDPROC
+nbid%=(nbid%+1) AND &FFFF
+PROCnb_query(nbq%,nbid%)
+scanr%=0:scanh%=0:scansent%=0:scanphase%=1:scanning%=TRUE
+SYS "OS_ReadMonotonicTime" TO scanend%
+ENDPROC
+
+REM the address ranges to scan: each up, non-loopback interface's IPv4 subnet
+DEF PROCscan_ranges
+LOCAL j%, a$, p%, ip%, pb%, base%, cnt%, maxs%
+nsr%=0:scantotal%=0:maxs%=MAXSCAN%
+REM the old stack has fewer network buffers to hold queries waiting for ARP
+IF stack%=1 THEN maxs%=256
+IF ifn%=0 THEN ENDPROC
+FOR j%=0 TO ifn%-1
+  IF (ifflags%(j%) AND iffup%) AND (ifflags%(j%) AND iffloop%)=0 AND ifa4$(j%)<>"" AND nsr%<=MAXIF% THEN
+    a$=ifa4$(j%):p%=INSTR(a$,","):IF p% THEN a$=LEFT$(a$,p%-1)
+    p%=INSTR(a$,"/")
+    IF p% THEN
+      ip%=FNipparse(LEFT$(a$,p%-1)):pb%=VAL(MID$(a$,p%+1))
+      REM big subnets: just the 256 addresses around this machine
+      IF pb%<22 THEN pb%=24
+      IF pb%<=30 AND ip%<>0 THEN
+        base%=ip% AND NOT ((1<<(32-pb%))-1):cnt%=(1<<(32-pb%))-2
+        IF scantotal%+cnt%>maxs% THEN cnt%=maxs%-scantotal%
+        IF cnt%>0 THEN
+          sbase%(nsr%)=base%:scount%(nsr%)=cnt%:sown%(nsr%)=ip%:sif%(nsr%)=j%
+          sdesc$(nsr%)=ifname$(j%)+" "+FNipstr(base%)+"/"+STR$pb%
+          nsr%+=1:scantotal%+=cnt%
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDIF
+NEXT
+ENDPROC
+
+REM called on every null event while a scan runs
+DEF PROCscan_step
+LOCAL k%, ip%, f%, now%
+SYS "OS_ReadMonotonicTime" TO now%
+k%=0
+WHILE k%<16 AND scanr%<nsr%
+  ip%=sbase%(scanr%)+1+scanh%
+  IF ip%<>sown%(scanr%) THEN
+    PROCsin(nsa%,ip%,137)
+    SYS XSocketSendto%,scansock%,nbq%,50,0,nsa%,16 TO ;f%
+    k%+=1
+  ENDIF
+  scansent%+=1:scanh%+=1
+  IF scanh%>=scount%(scanr%) THEN scanr%+=1:scanh%=0
+  scanend%=now%
+ENDWHILE
+PROCscan_receive
+REM wait 3 seconds after the last query for replies and ARP to finish,
+REM then ask again every machine that answered ARP but not NetBIOS (the
+REM stack only holds so many packets while it waits for ARP, so some of
+REM the first queries are dropped); then 1.5 seconds for those replies
+IF scanphase%=1 AND scanr%>=nsr% AND FNtdiff(now%,scanend%)>=300 THEN PROCscan_again:ENDPROC
+IF scanphase%=2 AND FNtdiff(now%,scanend%)>=150 THEN PROCscan_finish
+ENDPROC
+
+DEF PROCscan_again
+LOCAL i%, f%
+PROCread_arp
+scanretry%=0
+IF dn%>0 THEN
+  FOR i%=0 TO dn%-1
+    IF dmac$(i%)<>"" AND NOT dnb%(i%) THEN
+      PROCsin(nsa%,dip%(i%),137)
+      SYS XSocketSendto%,scansock%,nbq%,50,0,nsa%,16 TO ;f%
+      scanretry%+=1
+    ENDIF
+  NEXT
+ENDIF
+scanphase%=2
+SYS "OS_ReadMonotonicTime" TO scanend%
+ENDPROC
+
+DEF PROCscan_receive
+LOCAL n%, f%, k%
+REPEAT
+  !nsl%=16
+  SYS XSocketRecvfrom1%,scansock%,nbr%,576,0,nsa%,nsl% TO n% ;f%
+  IF (f% AND 1)=0 AND n%>0 THEN
+    IF nsa%?2=0 AND nsa%?3=137 AND nbr%?0=nbid%>>8 AND nbr%?1=(nbid% AND 255) THEN PROCnb_reply(nbr%,n%,FNipn(nsa%+4))
+  ENDIF
+  k%+=1
+UNTIL (f% AND 1) OR n%<=0 OR k%>=32
+ENDPROC
+
+DEF PROCscan_finish
+LOCAL j%, i%, d%
+PROCscan_receive
+PROCscan_close
+PROCread_arp
+REM this machine, from its own interfaces
+FOR j%=0 TO nsr%-1
+  i%=sif%(j%)
+  d%=FNdev(sown%(j%))
+  IF d%>=0 THEN
+    IF dmac$(d%)="" THEN PROCdev_mac(d%,ifmac$(i%))
+    dif$(d%)=ifname$(i%):dself%(d%)=TRUE
+    IF dname$(d%)="" THEN dname$(d%)=FNvar("Inet$HostName")
+  ENDIF
+NEXT
+scantime$=MID$(TIME$,17,8)
+IF wopen%(WDEV%) THEN PROCbuild_one(WDEV%):PROCrefresh_full(WDEV%)
+ENDPROC
+
+DEF PROCscan_close
+IF scansock%>=0 THEN SYS XSocketClose%,scansock%
+scansock%=-1:scanning%=FALSE
+ENDPROC
+
+REM sockaddr_in (4.4BSD layout: length, family, port, address)
+DEF PROCsin(sa%, ip%, port%)
+sa%?0=16:sa%?1=AF_INET%:sa%?2=port%>>8:sa%?3=port% AND 255
+sa%?4=ip%>>>24:sa%?5=(ip%>>>16) AND 255:sa%?6=(ip%>>>8) AND 255:sa%?7=ip% AND 255
+sa%!8=0:sa%!12=0
+ENDPROC
+
+REM NetBIOS node status query for "*" (RFC 1002 4.2.17), 50 bytes
+DEF PROCnb_query(q%, id%)
+LOCAL i%
+q%?0=id%>>8:q%?1=id% AND 255
+FOR i%=2 TO 11:q%?i%=0:NEXT
+q%?5=1
+q%?12=32:q%?13=ASC"C":q%?14=ASC"K"
+FOR i%=15 TO 44:q%?i%=ASC"A":NEXT
+q%?45=0:q%?46=0:q%?47=&21:q%?48=0:q%?49=1
+ENDPROC
+
+REM a node status response (RFC 1002 4.2.18): names, workgroup and MAC
+DEF PROCnb_reply(r%, n%, ip%)
+LOCAL p%, num%, i%, e%, fl%, sfx%, nm$, d%, c%, k%, mac$
+IF n%<57 OR (r%?2 AND &80)=0 OR r%?7=0 THEN ENDPROC
+p%=r%+12
+IF (?p% AND &C0)=&C0 THEN
+  p%+=2
+ELSE
+  WHILE ?p%<>0 AND p%<r%+n%:p%+=?p%+1:ENDWHILE
+  p%+=1
+ENDIF
+IF p%+11>r%+n% THEN ENDPROC
+IF p%?0<>0 OR p%?1<>&21 THEN ENDPROC
+num%=p%?10:e%=p%+11
+IF num%=0 OR e%+18*num%>r%+n% THEN ENDPROC
+d%=FNdev(ip%):IF d%<0 THEN ENDPROC
+FOR i%=0 TO num%-1
+  nm$=""
+  FOR k%=0 TO 14
+    c%=e%?k%:IF c%<32 OR c%>126 THEN c%=32
+    nm$+=CHR$c%
+  NEXT
+  WHILE RIGHT$(nm$,1)=" " AND nm$<>"":nm$=LEFT$(nm$,LEN(nm$)-1):ENDWHILE
+  sfx%=e%?15:fl%=e%?16
+  IF sfx%=0 AND (fl% AND &80)=0 AND dname$(d%)="" THEN dname$(d%)=nm$
+  IF sfx%=0 AND (fl% AND &80) AND dgrp$(d%)="" THEN dgrp$(d%)=nm$
+  IF sfx%=&20 AND (fl% AND &80)=0 AND dname$(d%)="" THEN dname$(d%)=nm$
+  e%+=18
+NEXT
+REM the unit ID that follows is the MAC address (Samba sends zeros)
+IF e%+6<=r%+n% AND dmac$(d%)="" THEN
+  mac$="":c%=0
+  FOR k%=0 TO 5
+    mac$+=RIGHT$("0"+STR$~(e%?k%),2):IF k%<5 THEN mac$+=":"
+    c%=c% OR e%?k%
+  NEXT
+  IF c% THEN PROCdev_mac(d%,FNlower(mac$))
+ENDIF
+dnb%(d%)=TRUE
+ENDPROC
+
+REM ARP entries from the routing table: host routes with RTF_LLINFO whose
+REM gateway is a link-level (MAC) address
+DEF PROCread_arp
+LOCAL n%
+IF stack%=0 THEN ENDPROC
+PROCmib(CTL_NET%,PF_ROUTE%,0,0,NET_RT_DUMP%,0)
+n%=FNsysctl(mib%,6,rtbuf%,RTBUFSZ%)
+IF n%<0 THEN scanmsg$="ARP table not available: "+sysctl_err$:ENDPROC
+PROCparse_arp(rtbuf%,n%)
+ENDPROC
+
+DEF PROCparse_arp(buf%, n%)
+LOCAL p%, ml%, hdr%, idx%, addrs%, fl%, sa%, bit%, l%, dst%, gw%, skip%, d%, i%, j%, mac$
+p%=buf%
+WHILE p%+4<=buf%+n%
+  ml%=FNu16(p%)
+  IF ml%<4 THEN ml%=buf%+n%-p%+4:p%?3=0
+  IF p%?3=4 THEN
+    IF stack%=2 THEN
+      hdr%=FNu16(p%+4):idx%=FNu16(p%+6):addrs%=p%!12:fl%=p%!16:skip%=&600200
+    ELSE
+      hdr%=92:idx%=FNu16(p%+4):fl%=p%!8:addrs%=p%!12:skip%=&E00000
+    ENDIF
+    IF (fl% AND &400) AND (fl% AND skip%)=0 THEN
+      dst%=0:gw%=0:sa%=p%+hdr%
+      FOR bit%=0 TO 7
+        IF addrs% AND (1<<bit%) THEN
+          IF bit%=0 THEN dst%=sa%
+          IF bit%=1 THEN gw%=sa%
+          l%=?sa%:IF l%=0 THEN sa%+=4 ELSE sa%+=((l%-1) OR 3)+1
+        ENDIF
+      NEXT
+      IF dst%<>0 AND gw%<>0 THEN
+        IF dst%?1=AF_INET% AND gw%?1=AF_LINK% AND gw%?6=6 THEN
+          mac$=""
+          FOR i%=0 TO 5
+            mac$+=RIGHT$("0"+STR$~(gw%?(8+gw%?5+i%)),2):IF i%<5 THEN mac$+=":"
+          NEXT
+          d%=FNdev(FNipn(dst%+4))
+          IF d%>=0 THEN
+            PROCdev_mac(d%,FNlower(mac$))
+            j%=FNfind(idx%):IF j%>=0 THEN dif$(d%)=ifname$(j%)
+          ENDIF
+        ENDIF
+      ENDIF
+    ENDIF
+  ENDIF
+  p%+=ml%
+ENDWHILE
+ENDPROC
+
+REM find a device by address, adding it if new (-1 if the table is full)
+DEF FNdev(ip%)
+LOCAL i%
+IF dn%>0 THEN
+  FOR i%=0 TO dn%-1:IF dip%(i%)=ip% THEN =i%
+  NEXT
+ENDIF
+IF dn%>MAXDEV% THEN =-1
+dip%(dn%)=ip%:dmac$(dn%)="":dname$(dn%)="":dgrp$(dn%)="":dvend$(dn%)=""
+dif$(dn%)="":dself%(dn%)=FALSE:dnb%(dn%)=FALSE
+dn%+=1
+=dn%-1
+
+DEF PROCdev_mac(d%, mac$)
+IF mac$=dmac$(d%) OR mac$="" THEN ENDPROC
+dmac$(d%)=mac$:dvend$(d%)=FNvendor(mac$)
+ENDPROC
+
+REM address <-> 32-bit number (host order: 192.168.0.1 = &C0A80001)
+DEF FNipn(p%)=(p%?0<<24) OR (p%?1<<16) OR (p%?2<<8) OR p%?3
+DEF FNipstr(ip%)=STR$(ip%>>>24)+"."+STR$((ip%>>>16) AND 255)+"."+STR$((ip%>>>8) AND 255)+"."+STR$(ip% AND 255)
+
+DEF FNipparse(a$)
+LOCAL i%, p%, q%, v%, ip%
+p%=1
+FOR i%=0 TO 3
+  q%=INSTR(a$+".",".",p%)
+  v%=VAL(MID$(a$,p%,q%-p%)):IF v%<0 OR v%>255 THEN =0
+  ip%=(ip%<<8) OR v%:p%=q%+1
+NEXT
+=ip%
+
+REM maker from the first three bytes of a MAC address: binary search of the
+REM IEEE list in <NetStats$Dir>.OUI (made by tools/mkoui.py)
+DEF FNvendor(mac$)
+LOCAL o%, lo%, hi%, mid%, r%
+IF LEN(mac$)<8 THEN =""
+o%=FNhex2(MID$(mac$,1,2)):IF o% AND 2 THEN ="(private address)"
+o%=(o%<<16) OR (FNhex2(MID$(mac$,4,2))<<8) OR FNhex2(MID$(mac$,7,2))
+IF ouih%=0 THEN
+  ouih%=OPENIN(ouifile$):ouin%=0
+  IF ouih%=0 THEN ouih%=-1
+  IF ouih%>0 THEN
+    PROCoui_read(0,16)
+    IF LEFT$($ouib%,6)="NSOUI1" THEN ouin%=ouib%!8:ouirs%=ouib%!12
+    IF ouirs%<4 OR ouirs%>60 THEN ouin%=0
+  ENDIF
+ENDIF
+IF ouih%<=0 OR ouin%=0 THEN =""
+lo%=0:hi%=ouin%-1
+WHILE lo%<=hi%
+  mid%=(lo%+hi%) DIV 2
+  PROCoui_read(16+mid%*ouirs%,ouirs%)
+  r%=(ouib%?0<<16) OR (ouib%?1<<8) OR ouib%?2
+  IF r%=o% THEN =FNouiname(ouib%)
+  IF r%<o% THEN lo%=mid%+1 ELSE hi%=mid%-1
+ENDWHILE
+=""
+
+DEF PROCoui_read(at%, n%)
+LOCAL i%
+ouib%?6=13
+IF at%+n%>EXT#ouih% THEN ENDPROC
+PTR#ouih%=at%
+FOR i%=0 TO n%-1:ouib%?i%=BGET#ouih%:NEXT
+ouib%?n%=13
+ENDPROC
+
+DEF FNhex2(h$)
+h$=FNlower(h$)
+=(INSTR("0123456789abcdef",LEFT$(h$,1))-1)*16+INSTR("0123456789abcdef",MID$(h$,2,1))-1
+
+DEF FNouiname(p%)
+LOCAL s$, i%
+FOR i%=0 TO p%?3-1:s$+=CHR$(p%?(4+i%)):NEXT
+=s$
+
+DEF PROCoui_close
+IF ouih%>0 THEN CLOSE#ouih%
+ouih%=0
+ENDPROC
+
+DEF PROCtext_dev
+LOCAL T$, i%, j%, k%, t%, s$, mv%
+T$=CHR$9
+nlines%(WDEV%)=0
+IF scanning% THEN
+  s$="~Scanning "+STR$scansent%+" of "+STR$scantotal%+" addresses"
+  IF scanr%>=nsr% THEN s$="~Waiting for the last replies"
+  IF scanphase%=2 THEN s$="~Asking "+STR$scanretry%+" devices for their names"
+  PROCaddl(WDEV%,s$+"...  "+STR$dn%+" found so far")
+ELSE
+  IF scanmsg$<>"" THEN PROCaddl(WDEV%,"!"+scanmsg$)
+  IF NOT scanned% THEN PROCaddl(WDEV%,"~Click in this window to scan the local network."):ENDPROC
+  IF nsr%>0 AND (scanmsg$="" OR dn%>0) THEN
+    s$=""
+    FOR i%=0 TO nsr%-1
+      IF LEN(s$)<120 THEN s$+=" "+sdesc$(i%)+","
+    NEXT
+    PROCaddl(WDEV%,"~"+STR$dn%+" devices on"+LEFT$(s$,LEN(s$)-1)+" at "+scantime$+".  Click to scan again.")
+  ENDIF
+ENDIF
+PROCaddl(WDEV%,"")
+PROCaddl(WDEV%,"#IP address"+T$+"MAC address"+T$+"Name"+T$+"Workgroup"+T$+"Maker"+T$+"Interface")
+REM in address order
+IF dn%>0 THEN
+  FOR i%=0 TO dn%-1:dord%(i%)=i%:NEXT
+  IF dn%>1 THEN
+    FOR i%=1 TO dn%-1
+      t%=dord%(i%):j%=i%-1:mv%=TRUE
+      REM (BASIC evaluates both sides of AND, so test j% first)
+      WHILE mv%
+        mv%=FALSE
+        IF j%>=0 THEN IF FNipgt(dip%(dord%(j%)),dip%(t%)) THEN dord%(j%+1)=dord%(j%):j%-=1:mv%=TRUE
+      ENDWHILE
+      dord%(j%+1)=t%
+    NEXT
+  ENDIF
+  FOR k%=0 TO dn%-1
+    i%=dord%(k%):s$=dname$(i%):IF dself%(i%) THEN s$+=" (this machine)"
+    PROCaddl(WDEV%,FNipstr(dip%(i%))+T$+dmac$(i%)+T$+s$+T$+dgrp$(i%)+T$+dvend$(i%)+T$+dif$(i%))
+  NEXT
+ENDIF
+IF NOT scanning% AND scanned% THEN
+  PROCaddl(WDEV%,"")
+  PROCaddl(WDEV%,"~Names come from NetBIOS (Windows, Samba, LanMan); other devices show their address only.")
+  PROCaddl(WDEV%,"~Devices on other networks (beyond a router) cannot be seen.")
+ENDIF
+PROCautotab(WDEV%,0,64)
+ENDPROC
+
+REM unsigned compare of two addresses
+DEF FNipgt(a%, b%)=(a% EOR &80000000)>(b% EOR &80000000)
 
 REM ===========================================================================
 REM Choices: <Choices$Write>.NetStats.Choices, read via Choices:

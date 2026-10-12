@@ -1,5 +1,5 @@
 | !Run file for NetStats
 Set NetStats$Dir <Obey$Dir>
 IconSprites <NetStats$Dir>.!Sprites
-WimpSlot -min 512K -max 512K
+WimpSlot -min 800K -max 800K
 Run <NetStats$Dir>.!RunImage %*0

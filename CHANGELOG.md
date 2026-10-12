@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.06-rc4 (12 Oct 2026)
+- New **Devices** window: the other machines on the local network, with
+  IP address, MAC address, NetBIOS name and workgroup, the adapter's
+  maker and the interface. A scan sends a NetBIOS node status query to
+  each address on the local IPv4 network(s) (up to 1024) and then reads
+  the stack's ARP table, then asks again any machine that answered ARP
+  but not NetBIOS. Click in the window to scan again (when the window
+  is reopened at start-up it waits for a click). Scans are limited to
+  1024 addresses (256 on the Internet 5 stack).
+- Makers come from the IEEE OUI list (`!NetStats.OUI`, built from
+  `data/oui.tsv` by `tools/mkoui.py`). Randomised ("private") MAC
+  addresses are shown as such.
+- Menu: "Devices" added after "Network".
+- The routing table buffer is now 256K (the ARP entries a scan leaves
+  could overflow the old 32K one), so WimpSlot is now 800K.
+
 ## 1.06-rc3 (05 Oct 2026)
 - With "Rates on icon bar" off, the icon bar icon is a plain 68x68
   sprite icon, so it sits level with the other icons instead of

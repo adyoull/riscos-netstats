@@ -1,4 +1,4 @@
-NetStats 1.06-rc3 (05 Oct 2026)
+NetStats 1.06-rc4 (12 Oct 2026)
 ===============================
 
 Network statistics for RISC OS. NetStats shows how much your machine is
@@ -74,11 +74,42 @@ Network
   servers come from the Inet$HostName, Inet$LocalDomain and
   Inet$Resolvers system variables.
 
+Devices
+  The other machines on your local network: IP address, MAC (hardware)
+  address, name and workgroup, the maker of the network adapter, and the
+  interface they were found on. Opening the window the first time scans
+  the network; click in the window to scan again. A scan takes a few
+  seconds.
+  How it works: NetStats sends a small NetBIOS "node status" query (UDP
+  port 137) to every address on each local IPv4 network (up to 1024
+  addresses, 256 on the Internet 5 stack; on a bigger network, the 256
+  around this machine). Sending makes the stack find each machine's MAC
+  address (ARP), so afterwards the stack's ARP table lists every machine
+  that is switched on.
+  Machines that answered ARP but not the first query are asked again.
+  Windows PCs, Samba (Linux, most NAS boxes) and LanMan reply with their
+  name and workgroup. Other devices show their addresses only. If the
+  window was open when NetStats last quit, it comes back without
+  scanning: click in it to scan.
+  Notes:
+  * Only machines on the same network can be seen, not those beyond a
+    router. Some Wi-Fi routers keep wireless devices from seeing each
+    other ("client isolation").
+  * The ARP table keeps machines for a while after they have gone, so a
+    machine switched off a few minutes ago may still be listed.
+  * Phones and tablets often use a made-up ("private") MAC address;
+    these show "(private address)" as the maker.
+  * Scan only networks you look after: some company networks treat a
+    scan as suspicious.
+  * The makers come from the IEEE's public list of MAC address prefixes
+    (the OUI file inside !NetStats, names shortened).
+
 Menu
   Info                      about NetStats
   Monitor, Interfaces,
   Protocols, Connections,
-  Data usage, Network       open the windows; a tick shows which are
+  Data usage, Network,
+  Devices                   open the windows; a tick shows which are
                             open, and choosing a ticked one closes it
   Interface >               show all interfaces, or just one, in the
                             Monitor and on the icon bar
@@ -133,7 +164,15 @@ R3 -> buffer length (updated), R4 = R5 = 0:
   4,2,17,5       net.inet.udp.stats    - struct udpstat (ROD)
   4,2,0,33       net.inet.ip.stats     - struct ipstat  (ROD)
   4,17,0,0,1,0   net.route.0.0.dump    - the routing table (RTM_GET
-                 messages: rt_msghdr + destination, gateway, netmask)
+                 messages: rt_msghdr + destination, gateway, netmask).
+                 The Devices window takes the ARP entries from this
+                 (RTF_LLINFO host routes whose gateway is a sockaddr_dl
+                 holding the MAC address).
+
+The Devices scan uses Socket_Creat, Socket_Ioctl (FIONBIO), Socket_Sendto
+and Socket_Recvfrom_1 (&4121C, which returns a 4.4BSD sockaddr) to send
+NetBIOS node status queries (RFC 1002, 4.2.17) and read the replies
+(4.2.18: the names, then the adapter's MAC address).
 
 The ROD stack uses OpenBSD 6.8's structures: ifm_hdrlen gives the header
 size and if_data's counters are 64 bits. The old stack uses 4.4BSD/FreeBSD
